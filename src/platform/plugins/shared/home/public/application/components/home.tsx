@@ -56,6 +56,7 @@ export class Home extends Component<HomeProps, State> {
 
     const body = document.querySelector('body')!;
     body.classList.add('isHomPage');
+    body.style.backgroundColor = 'purple';
 
     this.state = {
       // If welcome is enabled, we wait for loading to complete
@@ -73,6 +74,7 @@ export class Home extends Component<HomeProps, State> {
 
     const body = document.querySelector('body')!;
     body.classList.remove('isHomPage');
+    body.style.backgroundColor = '';
   }
 
   public componentDidMount() {
