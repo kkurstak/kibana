@@ -91,6 +91,25 @@ const VERSION_OPTIONS = [
     ),
   },
   {
+    value: '__christianGroup' as IngestHubVersion,
+    inputDisplay: '',
+    disabled: true,
+    dropdownDisplay: (
+      <EuiText
+        size="xs"
+        css={{
+          fontWeight: 700,
+          textTransform: 'uppercase',
+          letterSpacing: '0.08em',
+          paddingBlock: '4px',
+          opacity: 0.5,
+        }}
+      >
+        <p>— Old (Christian) —</p>
+      </EuiText>
+    ),
+  },
+  {
     value: 'version1' as IngestHubVersion,
     inputDisplay: 'Christian-V1',
     dropdownDisplay: (

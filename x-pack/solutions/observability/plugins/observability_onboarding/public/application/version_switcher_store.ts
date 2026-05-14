@@ -7,6 +7,7 @@
 
 export type IngestHubVersion =
   | 'current'
+  | '__christianGroup'
   | 'blockUx'
   | 'streamsUx'
   | 'agentUx'
