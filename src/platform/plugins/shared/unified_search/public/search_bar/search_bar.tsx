@@ -126,6 +126,11 @@ export interface SearchBarOwnProps<QT extends AggregateQuery | Query = Query> {
   // Disables the default auto-refresh option inside the date picker
   isAutoRefreshDisabled?: boolean;
 
+  /**
+   * When false, hides pan/zoom controls rendered beside the super date picker.
+   * @default true
+   */
+  showTimeWindowButtons?: boolean;
   placeholder?: string;
   isClearable?: boolean;
   iconType?: EuiIconProps['type'];
@@ -808,6 +813,7 @@ export class SearchBarUI<QT extends (Query | AggregateQuery) | Query = Query> ex
           useBackgroundSearchButton={this.props.useBackgroundSearchButton}
           enableDateRangePicker={this.props.enableDateRangePicker}
           enableResourceBrowser={this.props.enableResourceBrowser}
+          showTimeWindowButtons={this.props.showTimeWindowButtons}
         />
       </div>
     );
