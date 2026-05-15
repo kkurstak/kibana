@@ -111,7 +111,7 @@ const VERSION_OPTIONS = [
   },
   {
     value: 'version1' as IngestHubVersion,
-    inputDisplay: 'Christian-V1',
+    inputDisplay: '-V1',
     dropdownDisplay: (
       <>
         <strong>Christian-V1</strong>
@@ -123,7 +123,7 @@ const VERSION_OPTIONS = [
   },
   {
     value: 'version2' as IngestHubVersion,
-    inputDisplay: 'Christian-V2',
+    inputDisplay: '-V2',
     dropdownDisplay: (
       <>
         <strong>Christian-V2</strong>
@@ -138,7 +138,7 @@ const VERSION_OPTIONS = [
   },
   {
     value: 'version3' as IngestHubVersion,
-    inputDisplay: 'Christian-V3',
+    inputDisplay: '-V3',
     dropdownDisplay: (
       <>
         <strong>Christian-V3</strong>
@@ -153,7 +153,7 @@ const VERSION_OPTIONS = [
   },
   {
     value: 'streamsUx' as IngestHubVersion,
-    inputDisplay: 'Streams',
+    inputDisplay: '-Streams',
     dropdownDisplay: (
       <>
         <strong>Streams</strong>
@@ -165,7 +165,7 @@ const VERSION_OPTIONS = [
   },
   {
     value: 'agentUx' as IngestHubVersion,
-    inputDisplay: 'Agent',
+    inputDisplay: '-Agent',
     dropdownDisplay: (
       <>
         <strong>Agent</strong>
@@ -177,7 +177,7 @@ const VERSION_OPTIONS = [
   },
   {
     value: 'aiSourceMap' as IngestHubVersion,
-    inputDisplay: 'AI SourceMap',
+    inputDisplay: '-AI SourceMap',
     dropdownDisplay: (
       <>
         <strong>AI SourceMap</strong>
