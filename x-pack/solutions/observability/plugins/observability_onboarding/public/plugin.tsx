@@ -5,24 +5,9 @@
  * 2.0.
  */
 
-import React, { useSyncExternalStore } from 'react';
+import React from 'react';
 import ReactDOM from 'react-dom';
-import {
-  EuiButtonIcon,
-  EuiContextMenuItem,
-  EuiContextMenuPanel,
-  EuiFlexGroup,
-  EuiFlexItem,
-  EuiIcon,
-  EuiPanel,
-  EuiSplitButton,
-  EuiSuperSelect,
-  EuiText,
-  EuiToolTip,
-  euiFontSize,
-  euiShadow,
-  useEuiTheme,
-} from '@elastic/eui';
+import { EuiSuperSelect, EuiText } from '@elastic/eui';
 import type {
   ObservabilityPublicSetup,
   ObservabilityPublicStart,
@@ -66,17 +51,6 @@ import {
 
 import { versionStore } from './application/version_switcher_store';
 import type { IngestHubVersion } from './application/version_switcher_store';
-import {
-  annotationCanvasVisibility,
-  requestEnterAnnotationMode,
-  requestRemoveAllAnnotationsPrompt,
-} from './application/onboarding_annotation_chrome_store';
-import {
-  isAppleLikeClientPlatform,
-  isEditableKeyboardTarget,
-  isPrimaryModifier,
-} from './application/onboarding_shortcut_helpers';
-import { DiscoverTour } from './application/discover_tour';
 const VERSION_OPTIONS = [
   {
     value: 'current' as IngestHubVersion,
@@ -189,187 +163,13 @@ const VERSION_OPTIONS = [
   },
 ];
 
-/** Widest toolbar label among `inputDisplay` values (strings only); keeps switcher width stable. */
-const LONGEST_VERSION_TOOLBAR_LABEL = VERSION_OPTIONS.reduce<string>((longest, option) => {
-  const label = typeof option.inputDisplay === 'string' ? option.inputDisplay : '';
-  return label.length > longest.length ? label : longest;
-}, '');
-
 const VersionSwitcherNavControl: React.FC<{
   navigateToApp?: (appId: string, options?: { path?: string }) => Promise<void>;
 }> = ({ navigateToApp }) => {
-  const euiThemeContext = useEuiTheme();
-  const { euiTheme } = euiThemeContext;
-  const toolbarVersionFontSize = euiFontSize(euiThemeContext, 's').fontSize;
-  /** Matches EUI compressed control: `padding-left/right` = `size.s` + `size.base * 1.5` per right icon. */
-  const versionSwitcherTriggerInlineSizePx = React.useMemo(() => {
-    const padCompressed = parseFloat(String(euiTheme.size.s));
-    const iconAffordance = parseFloat(String(euiTheme.size.base)) * 1.5;
-    const borderAllowance = 2;
-    const horizontalChrome =
-      (Number.isFinite(padCompressed) ? padCompressed : 12) * 2 +
-      (Number.isFinite(iconAffordance) ? iconAffordance : 24) +
-      borderAllowance;
-
-    if (typeof document === 'undefined') {
-      return Math.ceil(LONGEST_VERSION_TOOLBAR_LABEL.length * 9 + horizontalChrome);
-    }
-    const ctx = document.createElement('canvas').getContext('2d');
-    if (!ctx) {
-      return Math.ceil(LONGEST_VERSION_TOOLBAR_LABEL.length * 9 + horizontalChrome);
-    }
-    ctx.font = `${euiTheme.font.weight.regular} ${toolbarVersionFontSize} ${euiTheme.font.family}`;
-    return Math.ceil(ctx.measureText(LONGEST_VERSION_TOOLBAR_LABEL).width + horizontalChrome);
-  }, [euiTheme, toolbarVersionFontSize]);
-  const toolbarPanelShadow = euiShadow(euiThemeContext, 'xs', { direction: 'down' });
-  /** `euiShadow` returns a full `box-shadow: …;` declaration — do not prefix with `box-shadow:` again. */
-  const toolbarPanelShadowCss = toolbarPanelShadow.includes('box-shadow')
-    ? toolbarPanelShadow.replace(/(box-shadow:[^;]+);/m, '$1 !important;')
-    : toolbarPanelShadow;
-  /**
-   * Stack below EUI modal / mask levels so app modals (e.g. Streams "Add data") cover this toolbar.
-   */
-  const toolbarBaseZIndex = React.useMemo(() => {
-    const modalZ = Number(euiTheme.levels.modal);
-    const maskZ = Number(euiTheme.levels.mask);
-    const lowestFloating = Math.min(
-      Number.isFinite(modalZ) && modalZ > 0 ? modalZ : Number.POSITIVE_INFINITY,
-      Number.isFinite(maskZ) && maskZ > 0 ? maskZ : Number.POSITIVE_INFINITY
-    );
-    const base = lowestFloating === Number.POSITIVE_INFINITY ? 9000 : lowestFloating;
-    return Math.max(100, base - 2);
-  }, [euiTheme.levels.mask, euiTheme.levels.modal]);
-  const toolbarTooltipZIndex = toolbarBaseZIndex + 1;
-  /** Matches `EuiButtonIcon` `size="xs"` height (`euiButtonSizeMap().xs.height`). */
-  const toolbarControlHeight = euiTheme.size.l;
   const [active, setActive] = React.useState<IngestHubVersion>(versionStore.getSnapshot());
-  const [portalEl, setPortalEl] = React.useState<HTMLDivElement | null>(null);
-  const toolbarPortalHostRef = React.useRef<HTMLDivElement | null>(null);
-  const annotateShortcut = React.useMemo(
-    () => (isAppleLikeClientPlatform() ? '⇧⌘K' : 'Shift+Ctrl+K'),
-    []
-  );
-  const visibilityShortcut = React.useMemo(
-    () => (isAppleLikeClientPlatform() ? '⇧⌘L' : 'Shift+Ctrl+L'),
-    []
-  );
-  const annotationsVisible = useSyncExternalStore(
-    annotationCanvasVisibility.subscribe,
-    annotationCanvasVisibility.getSnapshot,
-    annotationCanvasVisibility.getServerSnapshot
-  );
-  const [annotationsActionsMenuOpen, setAnnotationsActionsMenuOpen] = React.useState(false);
-  const annotationsMenuItems = React.useMemo(
-    () => [
-      <EuiContextMenuItem
-        key="removeAllAnnotations"
-        data-test-subj="observabilityOnboardingToolbarRemoveAllAnnotations"
-        icon={<EuiIcon type="trash" size="m" color="danger" />}
-        onClick={() => {
-          setAnnotationsActionsMenuOpen(false);
-          requestRemoveAllAnnotationsPrompt();
-        }}
-      >
-        Remove all annotations
-      </EuiContextMenuItem>,
-    ],
-    []
-  );
-  React.useLayoutEffect(() => {
-    const el = document.createElement('div');
-    toolbarPortalHostRef.current = el;
-    el.id = 'obsOnboardingToolbarPortal';
-    el.style.position = 'fixed';
-    el.style.left = '50%';
-    el.style.transform = 'translateX(-50%)';
-    el.style.overflow = 'visible';
-    document.body.appendChild(el);
-    setPortalEl(el);
-    return () => {
-      toolbarPortalHostRef.current = null;
-      document.body.removeChild(el);
-      setPortalEl(null);
-    };
-  }, []);
-
-  React.useLayoutEffect(() => {
-    const el = toolbarPortalHostRef.current;
-    if (el) {
-      el.style.zIndex = String(toolbarBaseZIndex);
-    }
-  }, [toolbarBaseZIndex]);
-
-  React.useLayoutEffect(() => {
-    const el = toolbarPortalHostRef.current;
-    if (!el || !portalEl) {
-      return;
-    }
-
-    const fallbackHostHeightPx = () => {
-      const rowPx = parseFloat(String(toolbarControlHeight));
-      const row = Number.isFinite(rowPx) ? rowPx : 32;
-      /** `EuiPanel` uses `style={{ padding: 8 }}` (16px vertical) + `hasBorder` (thin top+bottom). */
-      return Math.ceil(16 + row + 2);
-    };
-
-    const parseCssPx = (value: string): number => {
-      const n = parseFloat(value.trim());
-      return Number.isFinite(n) ? n : 0;
-    };
-
-    const syncToolbarVertical = () => {
-      const panel = el.querySelector<HTMLElement>('[data-onboarding-toolbar-panel]');
-      const measured = panel ? panel.getBoundingClientRect().height : 0;
-      const hostPx = measured > 0 ? Math.ceil(measured) : fallbackHostHeightPx();
-
-      const cs = getComputedStyle(document.documentElement);
-      const topBarH = parseCssPx(cs.getPropertyValue('--kbn-application--top-bar-height'));
-      const topBarT = parseCssPx(cs.getPropertyValue('--kbn-application--top-bar-top'));
-      const headerH = parseCssPx(cs.getPropertyValue('--kbn-layout--header-height'));
-      const headerT = parseCssPx(cs.getPropertyValue('--kbn-layout--header-top'));
-
-      const useTopBar = topBarH > 0;
-      const rowTop = useTopBar ? topBarT : headerT;
-      let rowHeight: number;
-      if (useTopBar) {
-        rowHeight = topBarH;
-      } else if (headerH > 0) {
-        rowHeight = headerH;
-      } else {
-        rowHeight = hostPx;
-      }
-
-      el.style.top = `${Math.round(rowTop + (rowHeight - hostPx) / 2)}px`;
-    };
-
-    syncToolbarVertical();
-    const raf1 = window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(syncToolbarVertical);
-    });
-    const delayed = window.setTimeout(syncToolbarVertical, 300);
-    window.addEventListener('resize', syncToolbarVertical);
-
-    return () => {
-      window.cancelAnimationFrame(raf1);
-      window.clearTimeout(delayed);
-      window.removeEventListener('resize', syncToolbarVertical);
-    };
-  }, [portalEl, toolbarControlHeight]);
 
   React.useEffect(() => {
     return versionStore.subscribe(() => setActive(versionStore.getSnapshot()));
-  }, []);
-
-  React.useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.repeat || isEditableKeyboardTarget(e.target)) return;
-      if (isPrimaryModifier(e) && e.key.toLowerCase() === 'l' && e.shiftKey && !e.altKey) {
-        e.preventDefault();
-        annotationCanvasVisibility.toggleCanvas();
-      }
-    };
-    window.addEventListener('keydown', onKeyDown, true);
-    return () => window.removeEventListener('keydown', onKeyDown, true);
   }, []);
 
   const applyIngestHubVersion = React.useCallback(
@@ -387,204 +187,21 @@ const VersionSwitcherNavControl: React.FC<{
     [navigateToApp]
   );
 
-  if (!portalEl) {
-    return null;
-  }
-
-  return ReactDOM.createPortal(
-    <>
-      <style>{`.onboardingSwitcherTooltip { z-index: ${toolbarTooltipZIndex} !important; }`}</style>
-      <style>{`
-        #obsOnboardingToolbarPortal {
-          overflow: visible;
-        }
-        #obsOnboardingToolbarPortal .euiPanel {
-          ${toolbarPanelShadowCss}
-          overflow: visible;
-        }
-        #obsOnboardingToolbarPortal .euiFormControlLayout {
-          min-height: ${toolbarControlHeight};
-          height: ${toolbarControlHeight};
-          /* Fixed to longest option label so the toolbar does not resize when the selection changes */
-          inline-size: ${versionSwitcherTriggerInlineSizePx}px;
-          min-inline-size: ${versionSwitcherTriggerInlineSizePx}px;
-          max-inline-size: ${versionSwitcherTriggerInlineSizePx}px;
-        }
-        #obsOnboardingToolbarPortal .euiFormControlLayout__childrenWrapper {
-          min-height: ${toolbarControlHeight};
-          height: 100%;
-          display: flex;
-          align-items: stretch;
-        }
-        #obsOnboardingToolbarPortal .euiSuperSelectControl {
-          min-height: ${toolbarControlHeight};
-          height: ${toolbarControlHeight};
-          display: flex;
-          align-items: center;
-          line-height: 1 !important;
-          /* Do not set padding-inline — EUI reserves end space for the dropdown chevron via icon affordance. */
-          inline-size: 100%;
-          min-inline-size: 0;
-          max-inline-size: none;
-          overflow: visible !important;
-          text-overflow: clip !important;
-          white-space: nowrap;
-          font-size: ${toolbarVersionFontSize};
-        }
-        #obsOnboardingToolbarPortal .euiSuperSelectControl .eui-textTruncate {
-          overflow: visible !important;
-          text-overflow: clip !important;
-          max-inline-size: none !important;
-        }
-      `}</style>
-      <EuiPanel
-        data-onboarding-toolbar-panel
-        paddingSize="none"
-        hasShadow={false}
-        hasBorder
-        grow={false}
-        style={{ maxWidth: 520, padding: 8 }}
-      >
-        <EuiFlexGroup alignItems="center" gutterSize="xs" responsive={false} wrap>
-          <EuiFlexItem
-            grow={false}
-            css={{
-              display: 'flex',
-              alignItems: 'center',
-              flexShrink: 0,
-            }}
-          >
-            <EuiSuperSelect
-              data-test-subj="observabilityOnboardingToolbarVersionSuperSelect"
-              options={VERSION_OPTIONS}
-              valueOfSelected={active}
-              onChange={(value) => applyIngestHubVersion(value)}
-              compressed
-              hasDividers
-              fullWidth={false}
-              aria-label="Onboarding experience version"
-              popoverProps={{
-                zIndex: toolbarBaseZIndex,
-                repositionOnScroll: true,
-                panelMinWidth: 320,
-              }}
-            />
-          </EuiFlexItem>
-          <EuiFlexItem
-            grow={false}
-            css={{
-              alignSelf: 'center',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-              paddingInline: euiTheme.size.xs,
-            }}
-          >
-            <span
-              aria-hidden
-              css={{
-                display: 'block',
-                inlineSize: euiTheme.border.width.thin,
-                blockSize: `calc(${toolbarControlHeight} - ${euiTheme.size.xs} - ${euiTheme.size.xs})`,
-                backgroundColor: euiTheme.colors.borderBasePlain,
-              }}
-            />
-          </EuiFlexItem>
-          <EuiFlexItem
-            grow={false}
-            css={{
-              alignSelf: 'center',
-              flexShrink: 0,
-            }}
-          >
-            <EuiSplitButton size="xs">
-              <EuiSplitButton.ActionPrimary
-                isIconOnly
-                iconType="editorComment"
-                data-test-subj="observabilityOnboardingToolbarAddAnnotation"
-                aria-label={`Add annotation (${annotateShortcut})`}
-                onClick={() => requestEnterAnnotationMode()}
-                tooltipProps={{
-                  content: `Add annotation (${annotateShortcut})`,
-                  anchorClassName: 'onboardingSwitcherTooltip',
-                  disableScreenReaderOutput: true,
-                }}
-              />
-              <EuiSplitButton.ActionSecondary
-                data-test-subj="observabilityOnboardingToolbarAnnotationsActionsMenu"
-                aria-label="Annotation options"
-                aria-expanded={annotationsActionsMenuOpen}
-                onClick={() => setAnnotationsActionsMenuOpen((open) => !open)}
-                tooltipProps={{
-                  content: 'Annotation options',
-                  anchorClassName: 'onboardingSwitcherTooltip',
-                  disableScreenReaderOutput: true,
-                }}
-                popoverProps={{
-                  isOpen: annotationsActionsMenuOpen,
-                  closePopover: () => setAnnotationsActionsMenuOpen(false),
-                  anchorPosition: 'downRight',
-                  panelPaddingSize: 'none',
-                  zIndex: toolbarBaseZIndex,
-                  repositionOnScroll: true,
-                  children: <EuiContextMenuPanel size="s" items={annotationsMenuItems} />,
-                }}
-              />
-            </EuiSplitButton>
-          </EuiFlexItem>
-          <EuiFlexItem
-            grow={false}
-            css={{
-              alignSelf: 'center',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-              paddingInline: euiTheme.size.xs,
-            }}
-          >
-            <span
-              aria-hidden
-              css={{
-                display: 'block',
-                inlineSize: euiTheme.border.width.thin,
-                blockSize: `calc(${toolbarControlHeight} - ${euiTheme.size.xs} - ${euiTheme.size.xs})`,
-                backgroundColor: euiTheme.colors.borderBasePlain,
-              }}
-            />
-          </EuiFlexItem>
-          <EuiFlexItem grow={false}>
-            <EuiToolTip
-              content={
-                annotationsVisible
-                  ? `Hide annotations (${visibilityShortcut})`
-                  : `Show annotations (${visibilityShortcut})`
-              }
-              anchorClassName="onboardingSwitcherTooltip"
-              disableScreenReaderOutput
-            >
-              <EuiButtonIcon
-                data-test-subj="observabilityOnboardingToolbarToggleAnnotationsVisibility"
-                display={annotationsVisible ? 'base' : 'empty'}
-                size="xs"
-                iconType={annotationsVisible ? 'eye' : 'eyeClosed'}
-                aria-pressed={annotationsVisible}
-                color={annotationsVisible ? 'success' : 'text'}
-                aria-label={
-                  annotationsVisible
-                    ? `Hide annotations (${visibilityShortcut})`
-                    : `Show annotations (${visibilityShortcut})`
-                }
-                onClick={() => annotationCanvasVisibility.toggleCanvas()}
-              />
-            </EuiToolTip>
-          </EuiFlexItem>
-        </EuiFlexGroup>
-      </EuiPanel>
-      <DiscoverTour />
-    </>,
-    portalEl
+  return (
+    <EuiSuperSelect
+      data-test-subj="observabilityOnboardingToolbarVersionSuperSelect"
+      options={VERSION_OPTIONS}
+      valueOfSelected={active}
+      onChange={(value) => applyIngestHubVersion(value)}
+      compressed
+      hasDividers
+      fullWidth={false}
+      aria-label="Onboarding experience version"
+      popoverProps={{
+        panelMinWidth: 320,
+      }}
+      style={{ minWidth: 160 }}
+    />
   );
 };
 
