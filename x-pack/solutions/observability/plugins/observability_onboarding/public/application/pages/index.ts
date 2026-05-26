@@ -13,3 +13,5 @@ export { OtelLogsPage } from './otel_logs';
 export { FirehosePage } from './firehose';
 export { OtelApmPage } from './otel_apm';
 export { CloudForwarderPage } from './cloudforwarder';
+export { IngestHubPage } from './ingest_hub';
+export { IntegrationDetailPage } from './integration_detail_page';

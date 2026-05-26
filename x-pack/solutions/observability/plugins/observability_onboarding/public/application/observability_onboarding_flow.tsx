@@ -19,10 +19,12 @@ import {
   FirehosePage,
   OtelApmPage,
   CloudForwarderPage,
+  IngestHubPage,
+  IntegrationDetailPage,
 } from './pages';
 import type { ObservabilityOnboardingAppServices } from '..';
-import { useFlowBreadcrumb } from './shared/use_flow_breadcrumbs';
 import { useManagedOtlpServiceAvailability } from './shared/use_managed_otlp_service_availability';
+import { CommentOverlay } from './comment_overlay/comment_overlay';
 
 const queryClient = new QueryClient();
 
@@ -34,8 +36,6 @@ export function ObservabilityOnboardingFlow() {
     },
   } = useKibana<ObservabilityOnboardingAppServices>();
 
-  useFlowBreadcrumb(null);
-
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [pathname]);
@@ -44,6 +44,7 @@ export function ObservabilityOnboardingFlow() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <CommentOverlay />
       <Routes>
         <Route path="/auto-detect">
           <AutoDetectPage />
@@ -72,6 +73,15 @@ export function ObservabilityOnboardingFlow() {
             <CloudForwarderPage />
           </Route>
         )}
+        <Route path="/ingest-hub/:section?">
+          <IngestHubPage />
+        </Route>
+        <Route exact path="/">
+          <LandingPage />
+        </Route>
+        <Route path="/add-data/:integration">
+          <IntegrationDetailPage />
+        </Route>
         <Route>
           <LandingPage />
         </Route>

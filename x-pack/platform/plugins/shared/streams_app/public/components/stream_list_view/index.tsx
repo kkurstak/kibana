@@ -7,38 +7,62 @@
 
 import {
   EuiButton,
-  EuiButtonEmpty,
-  EuiEmptyPrompt,
+  EuiContextMenuItem,
+  EuiContextMenuPanel,
   EuiFlexGroup,
   EuiFlexItem,
-  EuiLoadingElastic,
+  EuiPopover,
   useEuiTheme,
 } from '@elastic/eui';
 import { css } from '@emotion/react';
 import { usePerformanceContext } from '@kbn/ebt-tools';
 import { i18n } from '@kbn/i18n';
+import { SplitButton } from '@kbn/split-button';
 import { Streams } from '@kbn/streams-schema';
 import type { WiredStreamsStatus } from '@kbn/streams-plugin/public';
-import { isEmpty } from 'lodash';
 import React, { useEffect, useMemo, useState } from 'react';
+import useLocalStorage from 'react-use/lib/useLocalStorage';
+
+function useIsEmbedded(context: { appParams?: { __embedded?: boolean } } | null): boolean {
+  const fromUrl = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    const hash = window.location.hash.slice(1);
+    const qs = hash.includes('?') ? hash.substring(hash.indexOf('?') + 1) : '';
+    return new URLSearchParams(qs).has('embed');
+  }, []);
+  return Boolean(context?.appParams?.__embedded) || fromUrl;
+}
+
 import { useKibana } from '../../hooks/use_kibana';
 import { useStreamsAppFetch } from '../../hooks/use_streams_app_fetch';
 import { useStreamsAppRouter } from '../../hooks/use_streams_app_router';
 import { useStreamsPrivileges } from '../../hooks/use_streams_privileges';
 import { useTimefilter } from '../../hooks/use_timefilter';
 import { StreamsAppPageTemplate } from '../streams_app_page_template';
-import { WelcomeTourCallout } from '../streams_tour';
 import { ClassicStreamCreationFlyout } from './classic_stream_creation_flyout';
+import {
+  IngestHubDemoStreamsDemoToolbar,
+  type IngestHubDemoStreamsListViewMode,
+} from './ingest_hub_demo_streams_demo_toolbar';
+import { MockAwsStreamsCanvas } from './ingest_hub_demo_streams_canvas';
+import { MockAwsStreamsTable } from './ingest_hub_demo_streams_table';
 import { StreamsListEmptyPrompt } from './streams_list_empty_prompt';
 import { StreamsSettingsFlyout } from './streams_settings_flyout';
-import { StreamsTreeTable } from './tree_table';
-import { LegacyLogsDeprecationCallout } from './legacy_logs_deprecation_callout';
 import { CreateQueryStreamFlyout } from '../query_streams/create_query_stream_flyout';
 import { getFormattedError } from '../../util/errors';
+import { DataSourcesCatalogFlyout } from '../data_sources_view/data_sources_catalog_flyout';
+import { useStreamsListHeaderDatePopoversRightCap } from './use_streams_list_header_date_popovers_right_cap';
+import {
+  useIngestHubAwsLogsDemoActive,
+  useMarkIngestHubAwsLogsDemoActive,
+} from '../ingest_hub_aws_logs_demo_data';
+
+const ALL_STREAMS_MOCK_LIST_VIEW_MODE_KEY = 'streams:allStreams:mockListViewMode';
 
 export function StreamListView() {
   const { euiTheme } = useEuiTheme();
   const context = useKibana();
+  const isEmbedded = useIsEmbedded(context);
   const {
     dependencies: {
       start: {
@@ -142,109 +166,184 @@ export function StreamListView() {
     }
   }, [streamsListFetch.loading, streamsListFetch.value, onPageReady]);
 
+  const hasIngestedMockAwsData = useIngestHubAwsLogsDemoActive();
+  const markIngestHubAwsLogsDemoActive = useMarkIngestHubAwsLogsDemoActive();
+  useStreamsListHeaderDatePopoversRightCap(hasIngestedMockAwsData && !isEmbedded);
+
+  const [mockListViewMode, setMockListViewMode] = useLocalStorage<IngestHubDemoStreamsListViewMode>(
+    ALL_STREAMS_MOCK_LIST_VIEW_MODE_KEY,
+    'table'
+  );
+  const effectiveMockListViewMode: IngestHubDemoStreamsListViewMode = mockListViewMode ?? 'table';
+
   const [isSettingsFlyoutOpen, setIsSettingsFlyoutOpen] = React.useState(false);
+  const [isCreateClassicStreamActionsOpen, setIsCreateClassicStreamActionsOpen] =
+    React.useState(false);
   const [isClassicStreamCreationFlyoutOpen, setIsClassicStreamCreationFlyoutOpen] =
     React.useState(false);
+  const [isCatalogOpen, setIsCatalogOpen] = React.useState(false);
+
+  const handleDataConnected = React.useCallback(() => {
+    markIngestHubAwsLogsDemoActive();
+  }, [markIngestHubAwsLogsDemoActive]);
 
   return (
     <>
-      <StreamsAppPageTemplate.Header
-        bottomBorder="extended"
-        css={css`
-          background: ${euiTheme.colors.backgroundBasePlain};
-        `}
-        pageTitle={
-          <EuiFlexGroup
-            justifyContent="spaceBetween"
-            gutterSize="s"
-            responsive={false}
-            alignItems="center"
-          >
-            <EuiFlexItem>
-              <EuiFlexGroup alignItems="center" gutterSize="m">
-                {i18n.translate('xpack.streams.streamsListView.pageHeaderTitle', {
-                  defaultMessage: 'Streams',
-                })}
-              </EuiFlexGroup>
-            </EuiFlexItem>
-            <EuiFlexItem grow={false}>
-              <EuiButtonEmpty
-                iconType="gear"
-                size="s"
-                onClick={() => setIsSettingsFlyoutOpen(true)}
-                aria-label={i18n.translate('xpack.streams.streamsListView.settingsButtonLabel', {
-                  defaultMessage: 'Settings',
-                })}
-              >
-                {i18n.translate('xpack.streams.streamsListView.settingsButtonLabel', {
-                  defaultMessage: 'Settings',
-                })}
-              </EuiButtonEmpty>
-            </EuiFlexItem>
-            <EuiFlexItem grow={false}>
-              <EuiButton
-                onClick={() => setIsClassicStreamCreationFlyoutOpen(true)}
-                size="s"
-                disabled={!(canManageStreamsKibana && canManageClassicElasticsearch)}
-              >
-                {i18n.translate('xpack.streams.streamsListView.createClassicStreamButtonLabel', {
-                  defaultMessage: 'Create classic stream',
-                })}
-              </EuiButton>
-            </EuiFlexItem>
-            {significantEventsDiscovery?.available && significantEventsDiscovery.enabled && (
-              <EuiFlexItem grow={false}>
-                <EuiButton
-                  href={router.link('/_discovery')}
-                  iconType="crosshairs"
-                  size="s"
-                  data-test-subj="streamsSignificantEventsDiscoveryButton"
+      {!isEmbedded && (
+        <StreamsAppPageTemplate.Header
+          bottomBorder="extended"
+          css={css`
+            background: ${euiTheme.colors.backgroundBasePlain};
+            box-sizing: border-box;
+            min-inline-size: 0;
+            padding-inline-end: ${euiTheme.size.l};
+          `}
+          pageTitle={i18n.translate('xpack.streams.streamsListView.pageHeaderTitle', {
+            defaultMessage: 'All streams',
+          })}
+          rightSideGroupProps={{
+            alignItems: 'center',
+            responsive: false,
+            wrap: false,
+            css: css`
+              min-inline-size: 0;
+              max-inline-size: 100%;
+              flex-shrink: 1;
+            `,
+          }}
+          rightSideItems={[
+            <EuiFlexGroup
+              key="streamsAllStreamsHeaderActions"
+              data-test-subj="streamsAllStreamsHeaderActions"
+              alignItems="center"
+              gutterSize="none"
+              responsive={false}
+              wrap={false}
+              css={css`
+                gap: ${euiTheme.size.s};
+                min-inline-size: 0;
+                max-inline-size: 100%;
+              `}
+            >
+              {significantEventsDiscovery?.available && significantEventsDiscovery.enabled ? (
+                <EuiFlexItem grow={false}>
+                  <EuiButton
+                    href={router.link('/_discovery')}
+                    iconType="crosshairs"
+                    data-test-subj="streamsSignificantEventsDiscoveryButton"
+                  >
+                    {i18n.translate('xpack.streams.streamsListView.sigEventsDiscoveryButtonLabel', {
+                      defaultMessage: 'SigEvents Discovery',
+                    })}
+                  </EuiButton>
+                </EuiFlexItem>
+              ) : null}
+              {hasIngestedMockAwsData ? (
+                <EuiFlexItem
+                  grow={false}
+                  css={css`
+                    min-inline-size: 0;
+                  `}
                 >
-                  {i18n.translate('xpack.streams.streamsListView.sigEventsDiscoveryButtonLabel', {
-                    defaultMessage: 'Significant Events',
-                  })}
-                </EuiButton>
-              </EuiFlexItem>
-            )}
-            {queryStreams?.enabled && (
-              <EuiFlexItem grow={false}>
-                <CreateQueryStreamFlyout onQueryStreamCreated={streamsListFetch.refresh} />
-              </EuiFlexItem>
-            )}
-          </EuiFlexGroup>
-        }
-      />
-      <StreamsAppPageTemplate.Body grow>
-        {streamsListFetch.loading && streamsListFetch.value === undefined ? (
-          <EuiEmptyPrompt
-            icon={<EuiLoadingElastic size="xl" />}
-            title={
-              <h2>
-                {i18n.translate('xpack.streams.streamsListView.loadingStreams', {
-                  defaultMessage: 'Loading Streams',
-                })}
-              </h2>
-            }
-          />
-        ) : !streamsListFetch.loading && isEmpty(streamsListFetch.value?.streams) ? (
-          <StreamsListEmptyPrompt />
+                  <IngestHubDemoStreamsDemoToolbar
+                    listViewMode={effectiveMockListViewMode}
+                    onListViewModeChange={setMockListViewMode}
+                    showToolbarBottomDivider={false}
+                    embedInCard={false}
+                    layout="pageHeader"
+                  />
+                </EuiFlexItem>
+              ) : null}
+              {hasIngestedMockAwsData ? (
+                <EuiFlexItem grow={false}>
+                  <EuiPopover
+                    isOpen={isCreateClassicStreamActionsOpen}
+                    closePopover={() => setIsCreateClassicStreamActionsOpen(false)}
+                    anchorPosition="downRight"
+                    panelPaddingSize="none"
+                    repositionOnScroll
+                    button={
+                      <SplitButton
+                        data-test-subj="streamsListViewHeaderSplit"
+                        size="s"
+                        color="primary"
+                        fill={false}
+                        type="button"
+                        onClick={() => {
+                          setIsCreateClassicStreamActionsOpen(false);
+                          setIsCatalogOpen(true);
+                        }}
+                        disabled={!canManageStreamsKibana}
+                        onSecondaryButtonClick={() =>
+                          setIsCreateClassicStreamActionsOpen((open) => !open)
+                        }
+                        secondaryButtonIcon="arrowDown"
+                        secondaryButtonAriaLabel={i18n.translate(
+                          'xpack.streams.streamsListView.headerSplitMoreActionsAriaLabel',
+                          {
+                            defaultMessage: 'More stream actions',
+                          }
+                        )}
+                      >
+                        {i18n.translate('xpack.streams.streamsListView.addSourceButtonLabel', {
+                          defaultMessage: 'Add data',
+                        })}
+                      </SplitButton>
+                    }
+                  >
+                    <EuiContextMenuPanel
+                      size="s"
+                      items={[
+                        <EuiContextMenuItem
+                          key="create-stream"
+                          data-test-subj="streamsListViewCreateStreamMenuItem"
+                          icon="plusInCircle"
+                          disabled={!(canManageStreamsKibana && canManageClassicElasticsearch)}
+                          onClick={() => {
+                            setIsCreateClassicStreamActionsOpen(false);
+                            setIsClassicStreamCreationFlyoutOpen(true);
+                          }}
+                        >
+                          {i18n.translate('xpack.streams.streamsListView.createStreamMenuItemLabel', {
+                            defaultMessage: 'Create stream',
+                          })}
+                        </EuiContextMenuItem>,
+                        <EuiContextMenuItem
+                          key="settings"
+                          data-test-subj="streamsListViewSettingsMenuItem"
+                          icon="gear"
+                          onClick={() => {
+                            setIsCreateClassicStreamActionsOpen(false);
+                            setIsSettingsFlyoutOpen(true);
+                          }}
+                        >
+                          {i18n.translate('xpack.streams.streamsListView.settingsButtonLabel', {
+                            defaultMessage: 'Settings',
+                          })}
+                        </EuiContextMenuItem>,
+                      ]}
+                    />
+                  </EuiPopover>
+                </EuiFlexItem>
+              ) : null}
+              {queryStreams?.enabled ? (
+                <EuiFlexItem grow={false}>
+                  <CreateQueryStreamFlyout onQueryStreamCreated={streamsListFetch.refresh} />
+                </EuiFlexItem>
+              ) : null}
+            </EuiFlexGroup>,
+          ]}
+        />
+      )}
+      <StreamsAppPageTemplate.Body grow={!isEmbedded}>
+        {hasIngestedMockAwsData ? (
+          effectiveMockListViewMode === 'table' ? (
+            <MockAwsStreamsTable />
+          ) : (
+            <MockAwsStreamsCanvas />
+          )
         ) : (
-          <>
-            <WelcomeTourCallout
-              hasClassicStreams={hasClassicStreams}
-              firstClassicStreamName={firstClassicStreamName}
-            />
-            <LegacyLogsDeprecationCallout
-              streamsStatus={wiredStreamsStatus}
-              openFlyout={() => setIsSettingsFlyoutOpen(true)}
-            />
-            <StreamsTreeTable
-              loading={streamsListFetch.loading}
-              streams={streamsListFetch.value?.streams}
-              wiredStreamsStatus={wiredStreamsStatus}
-              openFlyout={() => setIsSettingsFlyoutOpen(true)}
-            />
-          </>
+          <StreamsListEmptyPrompt onAddData={() => setIsCatalogOpen(true)} />
         )}
       </StreamsAppPageTemplate.Body>
       {isSettingsFlyoutOpen && (
@@ -257,6 +356,12 @@ export function StreamListView() {
       )}
       {isClassicStreamCreationFlyoutOpen && (
         <ClassicStreamCreationFlyout onClose={() => setIsClassicStreamCreationFlyoutOpen(false)} />
+      )}
+      {isCatalogOpen && (
+        <DataSourcesCatalogFlyout
+          onClose={() => setIsCatalogOpen(false)}
+          onDataConnected={handleDataConnected}
+        />
       )}
     </>
   );

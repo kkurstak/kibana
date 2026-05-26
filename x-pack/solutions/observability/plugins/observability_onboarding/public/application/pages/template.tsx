@@ -5,10 +5,9 @@
  * 2.0.
  */
 
-import { EuiPageTemplate, EuiSpacer, useEuiTheme } from '@elastic/eui';
+import { EuiPageTemplate } from '@elastic/eui';
 import { css } from '@emotion/react';
-import React from 'react';
-import { Footer } from '../footer/footer';
+import React, { useEffect } from 'react';
 import { Header } from '../header';
 
 interface TemplateProps {
@@ -19,7 +18,17 @@ export const PageTemplate: React.FC<React.PropsWithChildren<TemplateProps>> = ({
   children,
   customHeader,
 }) => {
-  const { euiTheme } = useEuiTheme();
+  useEffect(() => {
+    // Walk every ancestor of body looking for a scrolled element and reset it
+    const resetAllScrolledElements = (root: Element) => {
+      if (root.scrollTop > 0) root.scrollTop = 0;
+      for (const child of Array.from(root.children)) {
+        resetAllScrolledElements(child);
+      }
+    };
+    window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+    resetAllScrolledElements(document.body);
+  }, []);
 
   return (
     <EuiPageTemplate
@@ -28,17 +37,15 @@ export const PageTemplate: React.FC<React.PropsWithChildren<TemplateProps>> = ({
       `}
     >
       {!!customHeader ? customHeader : <Header />}
-      <EuiPageTemplate.Section paddingSize="xl" restrictWidth>
-        {children}
-      </EuiPageTemplate.Section>
-      <EuiSpacer size="xl" />
       <EuiPageTemplate.Section
+        paddingSize="none"
+        restrictWidth
         css={css`
-          padding-inline: 0px;
-          border-top: ${euiTheme.border.thin};
+          padding-block-start: 40px;
+          padding-block-end: 40px;
         `}
       >
-        <Footer />
+        {children}
       </EuiPageTemplate.Section>
     </EuiPageTemplate>
   );

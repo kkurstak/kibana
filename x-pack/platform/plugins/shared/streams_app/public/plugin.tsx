@@ -5,9 +5,10 @@
  * 2.0.
  */
 
-import type { AppMountParameters, AppUpdater } from '@kbn/core/public';
+import type { AppDeepLink, AppMountParameters, AppUpdater } from '@kbn/core/public';
 import {
   APP_WRAPPER_CLASS,
+  CoreScopedHistory,
   DEFAULT_APP_CATEGORIES,
   type CoreSetup,
   type CoreStart,
@@ -17,11 +18,17 @@ import {
 import type { Logger } from '@kbn/logging';
 import { DataStreamsStatsService } from '@kbn/dataset-quality-plugin/public';
 import { dynamic } from '@kbn/shared-ux-utility';
+import { createMemoryHistory } from 'history';
 import React from 'react';
 import { i18n } from '@kbn/i18n';
-import { from, map, switchMap } from 'rxjs';
+import { combineLatest, from, map, switchMap } from 'rxjs';
 import { css } from '@emotion/css';
 import ReactDOM from 'react-dom';
+import {
+  getStarredStreams$,
+  toStarredStreamDeepLinkId,
+} from '../common/ingest_hub_starred_streams';
+import { DataSourcesCatalogFlyout } from './components/data_sources_view/data_sources_catalog_flyout';
 import type {
   ConfigSchema,
   StreamsAppPublicSetup,
@@ -35,11 +42,66 @@ import {
   createDiscoverFlyoutStreamFieldLink,
   createDiscoverFlyoutStreamProcessingLink,
 } from './discover_features';
+import { StreamsAppContextProvider } from './components/streams_app_context_provider';
 import { StreamsTelemetryService } from './telemetry/service';
 import { StreamsAppLocatorDefinition } from '../common/locators';
-
 const StreamsApplication = dynamic(() =>
   import('./application').then((mod) => ({ default: mod.StreamsApplication }))
+);
+
+const STREAMS_APP_STATIC_DEEP_LINKS: AppDeepLink[] = [
+  {
+    id: 'streams-list',
+    title: i18n.translate('xpack.streams.nav.dataStreams', {
+      defaultMessage: 'All streams',
+    }),
+    path: '/',
+    visibleIn: [],
+  },
+  {
+    id: 'significant-events',
+    title: i18n.translate('xpack.streams.nav.significantEvents', {
+      defaultMessage: 'Significant events',
+    }),
+    path: '/',
+    visibleIn: [],
+  },
+  {
+    id: 'data-sources',
+    title: i18n.translate('xpack.streams.nav.dataSources', {
+      defaultMessage: 'Data sources',
+    }),
+    path: '/data-sources',
+    visibleIn: [],
+  },
+  {
+    id: 'content-packs',
+    title: i18n.translate('xpack.streams.nav.contentPacks', {
+      defaultMessage: 'Content Packs',
+    }),
+    path: '/content-packs',
+    visibleIn: [],
+  },
+  {
+    id: 'pipelines',
+    title: i18n.translate('xpack.streams.nav.pipelines', {
+      defaultMessage: 'Pipelines',
+    }),
+    path: '/pipelines',
+    visibleIn: [],
+  },
+];
+
+const StreamsListEmptyPromptLazy = dynamic(() =>
+  import('./components/stream_list_view/streams_list_empty_prompt').then((mod) => ({
+    default: mod.StreamsListEmptyPrompt,
+  }))
+);
+
+const AwsCatalogOnboardingWizardLazy = dynamic(() =>
+  import('./components/data_sources_view/aws_catalog_onboarding_wizard').then((mod) => ({
+    default: mod.AwsCatalogOnboardingWizard,
+  }))
 );
 
 export const renderApp = ({
@@ -75,7 +137,50 @@ export const renderApp = ({
   );
   return () => {
     ReactDOM.unmountComponentAtNode(element);
-    appWrapperElement.classList.remove(APP_WRAPPER_CLASS);
+    appWrapperElement.classList.remove(appWrapperClassName);
+  };
+};
+
+/**
+ * Renders the Streams list view into a container (e.g. for embedding in Ingest Hub).
+ * Does not touch the global app wrapper. Returns an unmount function.
+ */
+export const renderEmbeddedStreamList = ({
+  container,
+  coreStart,
+  pluginsStart,
+  services,
+  isServerless,
+}: {
+  container: HTMLElement;
+  coreStart: CoreStart;
+  pluginsStart: StreamsAppStartDependencies;
+  services: StreamsAppServices;
+  isServerless: boolean;
+}): (() => void) => {
+  const memoryHistory = createMemoryHistory({ initialEntries: ['/'], initialIndex: 0 });
+  const scopedHistory = new CoreScopedHistory(memoryHistory, '/app/streams');
+  const appMountParameters: AppMountParameters & { __embedded?: boolean } = {
+    element: container,
+    history: scopedHistory,
+    appBasePath: '/app/streams',
+    onAppLeave: () => {},
+    setHeaderActionMenu: () => {},
+    theme$: coreStart.theme.theme$,
+    __embedded: true,
+  };
+  ReactDOM.render(
+    <StreamsApplication
+      coreStart={coreStart}
+      pluginsStart={pluginsStart}
+      services={services}
+      isServerless={isServerless}
+      appMountParameters={appMountParameters}
+    />,
+    container
+  );
+  return () => {
+    ReactDOM.unmountComponentAtNode(container);
   };
 };
 
@@ -110,19 +215,28 @@ export class StreamsAppPlugin
       appRoute: '/app/streams',
       category: DEFAULT_APP_CATEGORIES.management,
       order: 10000,
+      deepLinks: STREAMS_APP_STATIC_DEEP_LINKS,
       updater$: from(startServicesPromise).pipe(
         switchMap(([_, pluginsStart]) =>
-          pluginsStart.streams.navigationStatus$.pipe(
-            map(({ status }): AppUpdater => {
-              return (app) => {
-                if (status !== 'enabled') {
+          combineLatest([pluginsStart.streams.navigationStatus$, getStarredStreams$()]).pipe(
+            map(([streamsStatus, starredStreamNames]): AppUpdater => {
+              return () => {
+                if (streamsStatus.status !== 'enabled') {
                   return {
                     visibleIn: [],
                   };
                 }
 
+                const starredDeepLinks: AppDeepLink[] = starredStreamNames.map((streamName) => ({
+                  id: toStarredStreamDeepLinkId(streamName),
+                  title: streamName,
+                  path: `/${streamName}`,
+                  visibleIn: [],
+                }));
+
                 return {
                   visibleIn: ['sideNav', 'globalSearch'],
+                  deepLinks: [...STREAMS_APP_STATIC_DEEP_LINKS, ...starredDeepLinks],
                 };
               };
             })
@@ -159,7 +273,7 @@ export class StreamsAppPlugin
     return {};
   }
 
-  start(_coreStart: CoreStart, pluginsStart: StreamsAppStartDependencies): StreamsAppPublicStart {
+  start(coreStart: CoreStart, pluginsStart: StreamsAppStartDependencies): StreamsAppPublicStart {
     const locator = pluginsStart.share.url.locators.create(new StreamsAppLocatorDefinition());
     pluginsStart.streams.navigationStatus$.subscribe((status) => {
       if (status.status !== 'enabled') return;
@@ -181,6 +295,75 @@ export class StreamsAppPlugin
       });
     });
 
-    return {};
+    return {
+      DataSourcesCatalogFlyout,
+      getStarredStreams$,
+      AwsCatalogOnboardingWizard: AwsCatalogOnboardingWizardLazy,
+      renderEmbeddedStreamListView: (container: HTMLElement): (() => void) => {
+        const services: StreamsAppServices = {
+          dataStreamsClient: new DataStreamsStatsService()
+            .start({ http: coreStart.http })
+            .getClient(),
+          telemetryClient: this.telemetry.getClient(),
+          version: this.version,
+        };
+        pluginsStart.data.query.timefilter.timefilter.triggerFetch();
+        return renderEmbeddedStreamList({
+          container,
+          coreStart,
+          pluginsStart,
+          services,
+          isServerless: this.context.env.packageInfo.buildFlavor === 'serverless',
+        });
+      },
+      renderEmbeddedStreamsEmptyPrompt: (container: HTMLElement): (() => void) => {
+        const memoryHistory = createMemoryHistory({ initialEntries: ['/'], initialIndex: 0 });
+        const scopedHistory = new CoreScopedHistory(memoryHistory, '/app/streams');
+        const appParams: AppMountParameters = {
+          element: container,
+          history: scopedHistory,
+          appBasePath: '/app/streams',
+          onAppLeave: () => {},
+          setHeaderActionMenu: () => {},
+          theme$: coreStart.theme.theme$,
+        };
+        const services: StreamsAppServices = {
+          dataStreamsClient: new DataStreamsStatsService()
+            .start({ http: coreStart.http })
+            .getClient(),
+          telemetryClient: this.telemetry.getClient(),
+          version: this.version,
+        };
+        ReactDOM.render(
+          coreStart.rendering.addContext(
+            <StreamsAppContextProvider
+              context={{
+                appParams,
+                core: coreStart,
+                dependencies: { start: pluginsStart },
+                services,
+                isServerless: this.context.env.packageInfo.buildFlavor === 'serverless',
+              }}
+            >
+              <StreamsListEmptyPromptLazy />
+            </StreamsAppContextProvider>
+          ),
+          container
+        );
+        return () => ReactDOM.unmountComponentAtNode(container);
+      },
+      renderAwsCatalogOnboardingWizard: (
+        container: HTMLElement,
+        { onBackToCatalogue }: { onBackToCatalogue: () => void }
+      ): (() => void) => {
+        ReactDOM.render(
+          coreStart.rendering.addContext(
+            <AwsCatalogOnboardingWizardLazy onBackToCatalogue={onBackToCatalogue} />
+          ),
+          container
+        );
+        return () => ReactDOM.unmountComponentAtNode(container);
+      },
+    };
   }
 }

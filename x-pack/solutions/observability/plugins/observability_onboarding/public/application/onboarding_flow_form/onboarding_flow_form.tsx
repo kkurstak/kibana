@@ -4,147 +4,112 @@
  * 2.0; you may not use this file except in compliance with the Elastic License
  * 2.0.
  */
-import { i18n } from '@kbn/i18n';
-
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { FormattedMessage } from '@kbn/i18n-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import useObservable from 'react-use/lib/useObservable';
 import type { FunctionComponent } from 'react';
 import {
-  EuiCheckableCard,
+  EuiButton,
+  EuiButtonEmpty,
+  EuiCard,
+  EuiCodeBlock,
+  EuiFieldSearch,
+  EuiFieldText,
   EuiFlexGroup,
   EuiFlexItem,
-  EuiPanel,
+  EuiFlyout,
+  EuiFlyoutBody,
+  EuiFlyoutFooter,
+  EuiFlyoutHeader,
+  EuiFormRow,
+  EuiHorizontalRule,
+  EuiIcon,
+  EuiLink,
+  EuiLoadingElastic,
   EuiSpacer,
+  EuiTab,
+  EuiTabs,
   EuiText,
   EuiTitle,
-  useGeneratedHtmlId,
   useEuiTheme,
-  EuiBadge,
-  EuiFlexGrid,
 } from '@elastic/eui';
 import { css } from '@emotion/react';
 
-import { useSearchParams } from 'react-router-dom-v5-compat';
+import { useSearchParams, useNavigate, useLocation } from 'react-router-dom-v5-compat';
+import { i18n } from '@kbn/i18n';
 import { useKibana } from '@kbn/kibana-react-plugin/public';
-import type { IntegrationCardItem } from '@kbn/fleet-plugin/public';
 import { usePerformanceContext } from '@kbn/ebt-tools';
-import { ObservabilityOnboardingPricingFeature } from '../../../common/pricing_features';
 import { PackageListSearchForm } from '../package_list_search_form/package_list_search_form';
-import type { Category } from './types';
 import { useCustomCards } from './use_custom_cards';
-import type { SupportedLogo } from '../shared/logo_icon';
-import { LogoIcon } from '../shared/logo_icon';
 import type { ObservabilityOnboardingAppServices } from '../..';
-import { PackageList } from '../package_list/package_list';
-import { usePricingFeature } from '../quickstart_flows/shared/use_pricing_feature';
+import {
+  SECTIONS,
+  POPULAR_INTEGRATION_TILES,
+  API_ENDPOINTS,
+  ELASTIC_LOGOS,
+} from '../pages/ingest_hub/ingest_hub_data';
+import { CardLogoIcon, IntegrationCard } from '../pages/ingest_hub/ingest_hub_components';
+import { useActiveVersion } from '../version_switcher_widget';
+import { Version2ApiEndpointsSplit } from '../version_2_api_endpoints_split';
+import { Version3ApiEndpointsSplit } from '../version_3_api_endpoints_split';
+import {
+  getFleetEnrollmentBaseHref,
+  resolveVersion1HeaderCreateApiKeyTargetEndpointId,
+  Version1ApiEndpointsHeaderCredentialSplit,
+} from '../version_1_api_endpoints_header_credential_split';
+import {
+  OPEN_AWS_CATALOG_OVERVIEW_LOCATION_STATE,
+  useDataSourcesCatalogFlyout,
+} from '../shared/use_data_sources_catalog_flyout';
 
-interface UseCaseOption {
-  id: Category;
-  label: string;
-  description: React.ReactNode;
-  logos?: SupportedLogo[];
-  showIntegrationsBadge?: boolean;
-}
+const allSections = [...SECTIONS];
 
 export const OnboardingFlowForm: FunctionComponent = () => {
   const {
     services: {
       context: { isCloud },
+      application,
+      docLinks,
+      chrome,
+      http,
     },
   } = useKibana<ObservabilityOnboardingAppServices>();
 
-  const metricsOnboardingEnabled = usePricingFeature(
-    ObservabilityOnboardingPricingFeature.METRICS_ONBOARDING
-  );
+  const [activeVersion] = useActiveVersion();
 
-  const applicationUseCaseOption: UseCaseOption = {
-    id: 'application',
-    label: i18n.translate(
-      'xpack.observability_onboarding.experimentalOnboardingFlow.euiCheckableCard.applicationLabel',
-      { defaultMessage: 'Application' }
-    ),
-    description: i18n.translate(
-      'xpack.observability_onboarding.onboardingFlowForm.applicationDescription',
-      {
-        defaultMessage:
-          'Monitor your frontend and backend applications, set up synthetic monitors, and track application performance across your stack',
-      }
-    ),
-    logos: ['opentelemetry', 'java', 'ruby', 'dotnet'],
-  };
+  const supportUrl = useObservable(chrome.getHelpSupportUrl$());
 
-  const options: UseCaseOption[] = [
-    {
-      id: 'host',
-      label: i18n.translate(
-        'xpack.observability_onboarding.experimentalOnboardingFlow.euiCheckableCard.hostLabel',
-        { defaultMessage: 'Host' }
-      ),
-      description: metricsOnboardingEnabled
-        ? i18n.translate('xpack.observability_onboarding.onboardingFlowForm.hostDescription', {
-            defaultMessage:
-              'Track your host and its services by setting up SLOs, receiving alerts, and remediating performance issues',
-          })
-        : i18n.translate(
-            'xpack.observability_onboarding.logsEssential.onboardingFlowForm.hostDescription',
-            {
-              defaultMessage:
-                'Ingest and analyze logs on your host such as OS, service, application and other logs',
-            }
-          ),
-      logos: ['opentelemetry', 'apache', 'mysql'],
-    },
-    {
-      id: 'kubernetes',
-      label: i18n.translate(
-        'xpack.observability_onboarding.experimentalOnboardingFlow.euiCheckableCard.kubernetesLabel',
-        { defaultMessage: 'Kubernetes' }
-      ),
-      description: metricsOnboardingEnabled
-        ? i18n.translate(
-            'xpack.observability_onboarding.onboardingFlowForm.kubernetesDescription',
-            {
-              defaultMessage:
-                'Monitor your Kubernetes cluster and container workloads using logs, metrics, traces, and profiling data',
-            }
-          )
-        : i18n.translate(
-            'xpack.observability_onboarding.logsEssential.onboardingFlowForm.kubernetesDescription',
-            {
-              defaultMessage: 'Observe logs from your Kubernetes environments',
-            }
-          ),
-      logos: ['kubernetes', 'opentelemetry'],
-    },
-    ...(metricsOnboardingEnabled ? [applicationUseCaseOption] : []),
-    {
-      id: 'cloud',
-      label: i18n.translate(
-        'xpack.observability_onboarding.experimentalOnboardingFlow.euiCheckableCard.cloudLabel',
-        { defaultMessage: 'Cloud' }
-      ),
-      description: i18n.translate(
-        'xpack.observability_onboarding.onboardingFlowForm.cloudDescription',
-        {
-          defaultMessage:
-            'Ingest telemetry data from your cloud services to better understand application behavior and ensure service availability',
-        }
-      ),
-      logos: ['azure', 'aws', 'gcp'],
-    },
-  ];
-
-  const radioGroupId = useGeneratedHtmlId({ prefix: 'onboardingCategory' });
-  const categorySelectorTitleId = useGeneratedHtmlId();
-  const packageListTitleId = useGeneratedHtmlId();
   const { onPageReady } = usePerformanceContext();
-
   const [searchParams, setSearchParams] = useSearchParams();
-
-  const suggestedPackagesRef = useRef<HTMLDivElement | null>(null);
-  const searchResultsRef = useRef<HTMLDivElement | null>(null);
   const [integrationSearch, setIntegrationSearch] = useState(searchParams.get('search') ?? '');
   const { euiTheme } = useEuiTheme();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { canOpenCatalog, openAwsOverview, catalogFlyout } = useDataSourcesCatalogFlyout();
+
+  const handleIntegrationTileClick = useCallback(
+    (tileId: string) => {
+      if (tileId === 'aws' && canOpenCatalog && openAwsOverview()) {
+        return;
+      }
+      navigate(`/add-data/${tileId}`);
+    },
+    [canOpenCatalog, navigate, openAwsOverview]
+  );
+
+  useEffect(() => {
+    const locationState = location.state as Record<string, unknown> | null;
+    if (locationState?.[OPEN_AWS_CATALOG_OVERVIEW_LOCATION_STATE] && canOpenCatalog) {
+      openAwsOverview();
+      navigate('.', { replace: true, state: {} });
+    }
+  }, [canOpenCatalog, location.state, navigate, openAwsOverview]);
+
+  const createCollectionCardHandler = useCallback(
+    (query: string) => () => {
+      setIntegrationSearch(query);
+    },
+    []
+  );
 
   useEffect(() => {
     const searchParam = searchParams.get('search') ?? '';
@@ -158,245 +123,1394 @@ export const OnboardingFlowForm: FunctionComponent = () => {
     setSearchParams(entries, { replace: true });
   }, [integrationSearch, searchParams, setSearchParams]);
 
-  const createCollectionCardHandler = useCallback(
-    (query: string) => () => {
-      setIntegrationSearch(query);
-      if (searchResultsRef.current) {
-        setTimeout(
-          scrollIntoViewWithOffset,
-          40, // Adding slight delay to ensure DOM is updated before calculating scroll position
-          searchResultsRef.current,
-          parseInt(euiTheme.size.l, 10)
-        );
-      }
-    },
-    [] // eslint-disable-line react-hooks/exhaustive-deps
-  );
-
   useEffect(() => {
     onPageReady({
       meta: { description: '[ttfmp_onboarding] The UI with onboarding categories is rendered' },
     });
   }, [onPageReady]);
 
-  const featuredCardsForCategoryMap: Record<Category, string[]> = {
-    host: ['auto-detect-logs', 'otel-logs'],
-    kubernetes: ['kubernetes-quick-start', 'otel-kubernetes'],
-    application: ['apm-virtual', 'otel-virtual', 'synthetics-virtual'],
-    cloud: ['azure-logs-virtual', 'aws-logs-virtual', 'gcp-logs-virtual'],
-  };
+  const [isPageLoading, setIsPageLoading] = useState(true);
+  const [showMoreApi, setShowMoreApi] = useState(false);
+  const [createdKeys, setCreatedKeys] = useState<Record<string, string>>({});
+  const [createKeyFlyout, setCreateKeyFlyout] = useState<{
+    endpointId: string;
+    keyName: string;
+  } | null>(null);
+  const [openAccordionId, setOpenAccordionId] = useState<string | null>(null);
+  const [flyoutTab, setFlyoutTab] = useState<'details' | 'api-key'>('details');
+  const [version2ApiEndpointId, setVersion2ApiEndpointId] = useState(
+    API_ENDPOINTS[0]?.id ?? 'endpoint-otlp'
+  );
+  /** Package search + results portal target (Version 2: Integrations section below API). */
+  const [version2IntegrationsPackageHost, setVersion2IntegrationsPackageHost] =
+    useState<HTMLDivElement | null>(null);
+  const [version3ApiEndpointId, setVersion3ApiEndpointId] = useState(
+    API_ENDPOINTS[0]?.id ?? 'endpoint-otlp'
+  );
+  const [version3IntegrationsPackageHost, setVersion3IntegrationsPackageHost] =
+    useState<HTMLDivElement | null>(null);
+  const [version3CreatedKeys, setVersion3CreatedKeys] = useState<Record<string, string>>({});
+
   const customCards = useCustomCards(createCollectionCardHandler);
-  const featuredCardsForCategory: IntegrationCardItem[] = customCards.filter((card) => {
-    const category = searchParams.get('category') as Category;
 
-    if (category === null) {
-      return false;
+  const isLandingV2OrV3 = activeVersion === 'version2' || activeVersion === 'version3';
+  /** Same shell as Version 2: Integrations block first, then API. */
+  const integrationsFirstLayout = activeVersion === 'version1' || activeVersion === 'version2';
+  const usesV2StyleApiEndpoints =
+    activeVersion === 'version1' || activeVersion === 'version2' || activeVersion === 'version3';
+
+  const version1HeaderCredentialTargetEndpointId = useMemo(
+    () => resolveVersion1HeaderCreateApiKeyTargetEndpointId(version2ApiEndpointId),
+    [version2ApiEndpointId]
+  );
+  const version1EnrollmentFleetHref = useMemo(
+    () => getFleetEnrollmentBaseHref(window.location.origin),
+    []
+  );
+
+  useEffect(() => {
+    if (
+      activeVersion === 'version1' ||
+      activeVersion === 'version2' ||
+      activeVersion === 'version3'
+    ) {
+      setOpenAccordionId(null);
     }
+  }, [activeVersion]);
 
-    const cardList = featuredCardsForCategoryMap[category] ?? [];
+  useEffect(() => {
+    if (activeVersion !== 'version2' && activeVersion !== 'version1') {
+      return;
+    }
+    if (!API_ENDPOINTS.some((e) => e.id === version2ApiEndpointId)) {
+      setVersion2ApiEndpointId(API_ENDPOINTS[0]!.id);
+    }
+  }, [activeVersion, version2ApiEndpointId]);
 
-    return cardList.includes(card.id);
-  });
+  useEffect(() => {
+    if (activeVersion !== 'version3') {
+      return;
+    }
+    if (!API_ENDPOINTS.some((e) => e.id === version3ApiEndpointId)) {
+      setVersion3ApiEndpointId(API_ENDPOINTS[0]!.id);
+    }
+  }, [activeVersion, version3ApiEndpointId]);
 
-  /**
-   * Cloud deployments have the new Firehose quick start
-   * flow enabled, so the ond card 'epr:awsfirehose' should
-   * not show up in the search results.
-   */
+  useEffect(() => {
+    if (
+      activeVersion !== 'version1' &&
+      activeVersion !== 'version2' &&
+      activeVersion !== 'version3'
+    ) {
+      setVersion2IntegrationsPackageHost(null);
+      setVersion3IntegrationsPackageHost(null);
+    }
+  }, [activeVersion]);
   const searchExcludePackageIdList = isCloud ? ['epr:awsfirehose'] : [];
 
-  let isSelectingCategoryWithKeyboard: boolean = false;
-
   return (
-    <EuiPanel hasBorder paddingSize="xl">
-      <EuiTitle size="s" id={categorySelectorTitleId}>
-        <strong>
-          {i18n.translate(
-            'xpack.observability_onboarding.experimentalOnboardingFlow.strong.startCollectingYourDataLabel',
-            {
-              defaultMessage: 'What do you want to monitor?',
-            }
-          )}
-        </strong>
-      </EuiTitle>
-      <EuiSpacer />
-      <EuiFlexGrid
-        columns={metricsOnboardingEnabled ? 2 : 3}
-        role="group"
-        aria-labelledby={categorySelectorTitleId}
-        data-test-subj="observabilityOnboardingUseCaseGrid"
-      >
-        {options.map((option) => (
-          <EuiFlexItem
-            key={option.id}
-            data-test-subj={`observabilityOnboardingUseCaseCard-${option.id}`} // EuiCheckableCard does not forward `data-test-subj` prop so using parent element instead
+    <>
+      {/* Always mounted so onLoadingChange fires once packages load */}
+      <PackageListSearchForm
+        searchQuery={integrationSearch}
+        setSearchQuery={setIntegrationSearch}
+        flowCategory={null}
+        customCards={customCards.filter((card) => !card.isCollectionCard)}
+        excludePackageIdList={searchExcludePackageIdList}
+        onLoadingChange={(loading) => setIsPageLoading(loading)}
+        portaledUiContainerEl={
+          integrationsFirstLayout
+            ? version2IntegrationsPackageHost
+            : activeVersion === 'version3'
+            ? version3IntegrationsPackageHost
+            : undefined
+        }
+        hideSearchBar
+      />
+
+      {isPageLoading && (
+        <EuiFlexGroup justifyContent="center" alignItems="center" style={{ minHeight: '60vh' }}>
+          <EuiLoadingElastic size="xl" />
+        </EuiFlexGroup>
+      )}
+
+      {/* Categorized sections — hidden while loading; Version 1/2/3 stays visible while searching when using that layout */}
+      {!isPageLoading && (isLandingV2OrV3 || integrationsFirstLayout || !integrationSearch) && (
+        <>
+          {integrationsFirstLayout ? (
+            <>
+              {/* Integrations first on Version 1 & 2 (API block follows) */}
+              <EuiTitle size="s">
+                <h3>Integrations</h3>
+              </EuiTitle>
+              <EuiSpacer size="s" />
+              <EuiText size="s" color="subdued">
+                <p>
+                  Pre-built integrations for your infrastructure and services. Includes dashboards,
+                  alerts, and more.
+                </p>
+              </EuiText>
+              <div
+                css={css`
+                  background-color: ${euiTheme.colors.backgroundBaseSubdued};
+                  border-radius: ${euiTheme.border.radius.medium};
+                  padding: 24px;
+                  min-width: 0;
+                  margin-top: ${euiTheme.size.l};
+                  margin-bottom: 40px;
+                `}
+              >
+                <EuiFieldSearch
+                  fullWidth
+                  data-test-subj="obsOnboardingIntegrationsSearchInput"
+                  placeholder={i18n.translate(
+                    'xpack.observabilityOnboarding.integrations.searchPlaceholder',
+                    {
+                      defaultMessage: 'Search integrations',
+                    }
+                  )}
+                  value={integrationSearch}
+                  onChange={(e) => setIntegrationSearch(e.target.value)}
+                  isClearable
+                  compressed
+                />
+                <EuiSpacer size="l" />
+                <div
+                  ref={setVersion2IntegrationsPackageHost}
+                  css={css`
+                    [data-test-subj='epmList.mainColumn'] {
+                      background-color: transparent !important;
+                    }
+                  `}
+                  style={{
+                    marginBottom: integrationSearch.trim() ? 40 : 0,
+                  }}
+                />
+                {!integrationSearch.trim() && (
+                  <>
+                    {allSections.map((section, index) => (
+                      <div key={section.title}>
+                        <div style={{ height: index === 0 ? 0 : 40 }} />
+                        <EuiText
+                          size="s"
+                          css={css`
+                            font-weight: ${euiTheme.font.weight.bold};
+                            color: ${euiTheme.colors.text};
+                            margin-bottom: 8px;
+                          `}
+                        >
+                          <p>{section.title}</p>
+                        </EuiText>
+                        <div
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(3, 1fr)',
+                            gap: 12,
+                          }}
+                        >
+                          {section.tiles.map((tile) => (
+                            <IntegrationCard
+                              key={tile.id}
+                              name={tile.name}
+                              description={tile.description}
+                              logoDomain={tile.logoDomain}
+                              logoUrl={tile.logoUrl}
+                              layout="horizontal"
+                              onClick={() => handleIntegrationTileClick(tile.id)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+
+                    <div style={{ height: 40 }} />
+                    <EuiText
+                      size="s"
+                      css={css`
+                        font-weight: ${euiTheme.font.weight.bold};
+                        color: ${euiTheme.colors.text};
+                        margin-bottom: 8px;
+                      `}
+                    >
+                      <p>More integrations</p>
+                    </EuiText>
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(5, minmax(0, 1fr)) minmax(0, 2fr)',
+                        gap: 12,
+                        alignItems: 'start',
+                      }}
+                    >
+                      {POPULAR_INTEGRATION_TILES.map((tile) => (
+                        <EuiCard
+                          key={tile.id}
+                          title={tile.name}
+                          titleElement="h4"
+                          titleSize="xs"
+                          description=""
+                          icon={<CardLogoIcon src={tile.logoUrl ?? ''} alt={`${tile.name} logo`} />}
+                          layout="vertical"
+                          hasBorder
+                          paddingSize="none"
+                          onClick={() => handleIntegrationTileClick(tile.id.replace('popular-', ''))}
+                          css={css`
+                            border-radius: 6px;
+                            box-shadow: ${euiTheme.shadows.s};
+                            padding: 16px;
+                            cursor: pointer;
+                            text-align: center;
+                            transition: box-shadow 150ms ease-in;
+                            &:hover,
+                            &:focus {
+                              box-shadow: ${euiTheme.shadows.m};
+                            }
+                            .euiCard__top {
+                              display: flex;
+                              justify-content: center;
+                              margin-bottom: 12px;
+                            }
+                            .euiCard__icon {
+                              margin-block-start: 0;
+                            }
+                            .euiCard__title {
+                              font-family: ${euiTheme.font.family};
+                              font-weight: ${euiTheme.font.weight.bold};
+                              color: ${euiTheme.colors.text};
+                            }
+                            .euiCard__description,
+                            .euiCard__children {
+                              display: none;
+                            }
+                            .euiCard__content {
+                              margin-bottom: 0;
+                              padding-bottom: 0;
+                            }
+                          `}
+                        />
+                      ))}
+                      <EuiCard
+                        title="Browse all"
+                        titleElement="h4"
+                        titleSize="xs"
+                        description=""
+                        icon={
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              height: 40,
+                              overflow: 'hidden',
+                            }}
+                          >
+                            {[
+                              {
+                                id: 'nginx',
+                                name: 'Nginx',
+                                url: `${ELASTIC_LOGOS}/nginx/img/logo_nginx.svg`,
+                              },
+                              {
+                                id: 'rabbitmq',
+                                name: 'RabbitMQ',
+                                url: `${ELASTIC_LOGOS}/rabbitmq/img/logo_rabbitmq.svg`,
+                              },
+                              {
+                                id: 'apache',
+                                name: 'Apache',
+                                url: `${ELASTIC_LOGOS}/apache/img/logo_apache.svg`,
+                              },
+                              {
+                                id: 'couchbase',
+                                name: 'Couchbase',
+                                url: `${ELASTIC_LOGOS}/couchbase/img/couchbase-logo.svg`,
+                              },
+                              {
+                                id: 'logstash',
+                                name: 'Logstash',
+                                url: `${ELASTIC_LOGOS}/logstash/img/logo_logstash.svg`,
+                              },
+                              {
+                                id: 'redis',
+                                name: 'Redis',
+                                url: `${ELASTIC_LOGOS}/redis/img/logo_redis.svg`,
+                              },
+                              {
+                                id: 'mysql',
+                                name: 'MySQL',
+                                url: `${ELASTIC_LOGOS}/mysql/img/logo_mysql.svg`,
+                              },
+                            ].map((logo, i, arr) => (
+                              <div
+                                key={logo.id}
+                                style={{
+                                  width: 40,
+                                  height: 40,
+                                  borderRadius: 8,
+                                  backgroundColor: euiTheme.colors.backgroundBaseSubdued,
+                                  border: `1px solid ${euiTheme.colors.borderBaseSubdued}`,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  marginLeft: i === 0 ? 0 : -10,
+                                  zIndex: arr.length - i,
+                                  position: 'relative',
+                                  overflow: 'hidden',
+                                  flexShrink: 0,
+                                }}
+                              >
+                                <img
+                                  src={logo.url}
+                                  alt={logo.name}
+                                  style={{ width: 24, height: 24, objectFit: 'contain' }}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        }
+                        layout="vertical"
+                        hasBorder
+                        paddingSize="none"
+                        onClick={() =>
+                          application.navigateToApp('integrations', { path: '/browse' })
+                        }
+                        css={css`
+                          border-radius: 6px;
+                          box-shadow: ${euiTheme.shadows.s};
+                          padding: 16px;
+                          cursor: pointer;
+                          text-align: center;
+                          transition: box-shadow 150ms ease-in;
+                          &:hover,
+                          &:focus {
+                            box-shadow: ${euiTheme.shadows.m};
+                          }
+                          .euiCard__top {
+                            display: flex;
+                            justify-content: center;
+                            margin-bottom: 12px;
+                          }
+                          .euiCard__icon {
+                            margin-block-start: 0;
+                          }
+                          .euiCard__title {
+                            font-family: ${euiTheme.font.family};
+                            font-weight: ${euiTheme.font.weight.bold};
+                            color: ${euiTheme.colors.text};
+                          }
+                          .euiCard__description,
+                          .euiCard__children {
+                            display: none;
+                          }
+                          .euiCard__content {
+                            margin-bottom: 0;
+                            padding-bottom: 0;
+                          }
+                        `}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+            </>
+          ) : null}
+
+          {/* API ingestion section */}
+          <EuiFlexGroup
+            direction="column"
+            gutterSize="none"
+            alignItems="stretch"
+            /* EuiFlexGroup replaces `css`; alignSelf stretch so API block uses full content width */
+            style={{
+              gap: 24,
+              flexGrow: 0,
+              alignSelf: 'stretch',
+              width: '100%',
+              minWidth: 0,
+              ...(integrationsFirstLayout ? { marginBlockEnd: 24 } : {}),
+            }}
           >
-            <EuiCheckableCard
-              id={`${radioGroupId}_${option.id}`}
-              name={radioGroupId}
-              label={
-                <>
-                  <EuiText>
-                    <strong>{option.label}</strong>
-                  </EuiText>
-                  {/* The description and logo icons are passed into `label` prop instead of `children` to ensure they are clickable */}
+            <EuiFlexGroup
+              alignItems="flexEnd"
+              justifyContent="spaceBetween"
+              responsive={true}
+              gutterSize="m"
+              style={{ flexGrow: 0, width: '100%', minWidth: 0 }}
+            >
+              <EuiFlexItem grow={true} style={{ minWidth: 0 }}>
+                <div>
+                  <EuiTitle size="s">
+                    <h3>API endpoints</h3>
+                  </EuiTitle>
                   <EuiSpacer size="s" />
-                  <EuiText
-                    color="subdued"
-                    size="s"
+                  <EuiText size="s" color="subdued">
+                    <p>
+                      Direct access to your deployment&apos;s endpoints. Create an API key to
+                      authenticate.{' '}
+                      <EuiLink
+                        data-test-subj={
+                          activeVersion === 'version1'
+                            ? 'obsOnboardingLandingV1ApiEndpointsDocumentation'
+                            : 'obsOnboardingLandingV2ApiEndpointsDocumentation'
+                        }
+                        href="https://www.elastic.co/docs/deploy-manage/api-keys/elasticsearch-api-keys"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        external
+                      >
+                        {i18n.translate(
+                          'xpack.observabilityOnboarding.version2ApiEndpoints.elasticsearchApiKeysLearnMore',
+                          { defaultMessage: 'Learn more' }
+                        )}
+                      </EuiLink>
+                    </p>
+                  </EuiText>
+                </div>
+              </EuiFlexItem>
+              {activeVersion === 'version1' ? (
+                <EuiFlexItem grow={false}>
+                  <Version1ApiEndpointsHeaderCredentialSplit
+                    dataTestSubj="obsOnboardingLandingV1ApiEndpointsHeaderCredential"
+                    apiKeyManageHref={http.basePath.prepend('/app/management/security/api_keys')}
+                    enrollmentFleetHref={version1EnrollmentFleetHref}
+                    createApiKeyForEndpointId={version1HeaderCredentialTargetEndpointId}
+                    onApiKeyCreated={(result, endpointId) => {
+                      const endpoint = API_ENDPOINTS.find((e) => e.id === endpointId);
+                      if (
+                        endpoint &&
+                        (endpoint.keyType === 'api_key' || endpoint.keyType === 'kibana_note')
+                      ) {
+                        setCreatedKeys((prev) => ({
+                          ...prev,
+                          [endpointId]: result.encoded,
+                        }));
+                      }
+                    }}
+                  />
+                </EuiFlexItem>
+              ) : null}
+            </EuiFlexGroup>
+            {usesV2StyleApiEndpoints ? (
+              activeVersion === 'version3' ? (
+                <Version3ApiEndpointsSplit
+                  searchQuery=""
+                  selectedEndpointId={version3ApiEndpointId}
+                  onSelectEndpoint={setVersion3ApiEndpointId}
+                  dataTestSubjPrefix="obsOnboardingLandingV3ApiEndpoint"
+                  secretsByEndpointId={version3CreatedKeys}
+                  apiKeyManageHref={http.basePath.prepend('/app/management/security/api_keys')}
+                  createApiKeyDataTestSubj="obsOnboardingLandingV3CreateApiKey"
+                  onApiKeyCreated={(result, endpointId) => {
+                    const endpoint = API_ENDPOINTS.find((e) => e.id === endpointId);
+                    if (
+                      endpoint &&
+                      (endpoint.keyType === 'api_key' || endpoint.keyType === 'kibana_note')
+                    ) {
+                      setVersion3CreatedKeys((prev) => ({
+                        ...prev,
+                        [endpointId]: result.encoded,
+                      }));
+                    }
+                  }}
+                />
+              ) : (
+                <Version2ApiEndpointsSplit
+                  searchQuery=""
+                  selectedEndpointId={version2ApiEndpointId}
+                  onSelectEndpoint={setVersion2ApiEndpointId}
+                  dataTestSubjPrefix={
+                    activeVersion === 'version1'
+                      ? 'obsOnboardingLandingV1ApiEndpoint'
+                      : 'obsOnboardingLandingV2ApiEndpoint'
+                  }
+                  secretsByEndpointId={createdKeys}
+                  apiKeyManageHref={http.basePath.prepend('/app/management/security/api_keys')}
+                  createApiKeyDataTestSubj={
+                    activeVersion === 'version1'
+                      ? 'obsOnboardingLandingV1CreateApiKey'
+                      : 'obsOnboardingLandingV2CreateApiKey'
+                  }
+                  unifiedHeaderCredentialActions={activeVersion === 'version1'}
+                  onApiKeyCreated={(result, endpointId) => {
+                    const endpoint = API_ENDPOINTS.find((e) => e.id === endpointId);
+                    if (
+                      endpoint &&
+                      (endpoint.keyType === 'api_key' || endpoint.keyType === 'kibana_note')
+                    ) {
+                      setCreatedKeys((prev) => ({
+                        ...prev,
+                        [endpointId]: result.encoded,
+                      }));
+                    }
+                  }}
+                />
+              )
+            ) : (
+              <>
+                <div
+                  css={css`
+                    background-color: ${euiTheme.colors.backgroundBaseSubdued};
+                    border-radius: ${euiTheme.border.radius.medium};
+                    padding: 24px;
+                  `}
+                >
+                  <div
                     css={css`
-                      flex-grow: 1; // Allow the description to grow to fill the space
+                      display: grid;
+                      grid-template-columns: repeat(2, 1fr);
+                      gap: 12px;
                     `}
                   >
-                    {option.description}
-                  </EuiText>
-                  {(option.logos || option.showIntegrationsBadge) && (
-                    <>
-                      <EuiSpacer size="m" />
-                      <EuiFlexGroup
-                        gutterSize="m"
-                        responsive={false}
-                        css={css`
-                          flex-grow: 0; // Prevent the logos from growing to align to the bottom
-                        `}
-                        aria-hidden // Hide from screen readers as the logos are mainly decorative
-                      >
-                        {option.logos?.map((logo) => (
-                          <EuiFlexItem key={logo} grow={false}>
-                            <LogoIcon logo={logo} size="l" />
-                          </EuiFlexItem>
-                        ))}
-                        {option.showIntegrationsBadge && (
-                          <EuiBadge color="hollow">
-                            <FormattedMessage
-                              id="xpack.observability_onboarding.experimentalOnboardingFlow.form.addIntegrations"
-                              defaultMessage="+ Integrations"
-                              description="A badge indicating that the user can add additional observability integrations to their deployment via this option"
-                            />
-                          </EuiBadge>
-                        )}
-                      </EuiFlexGroup>
-                    </>
-                  )}
-                </>
-              }
-              checked={option.id === searchParams.get('category')}
-              /**
-               * onKeyDown and onKeyUp handlers disable
-               * scrolling to the category items when user
-               * changes the selected category using keyboard,
-               * which prevents our custom scroll behavior
-               * from conflicting with browser's native one to
-               * put keyboard-focused item into the view.
-               */
-              onKeyDown={() => (isSelectingCategoryWithKeyboard = true)}
-              onKeyUp={() => (isSelectingCategoryWithKeyboard = false)}
-              onChange={() => {
-                setIntegrationSearch('');
-                setSearchParams({ category: option.id }, { replace: true });
-              }}
-              onClick={() => {
-                if (!isSelectingCategoryWithKeyboard && suggestedPackagesRef.current) {
-                  setTimeout(
-                    scrollIntoViewWithOffset,
-                    40, // Adding slight delay to ensure DOM is updated before calculating scroll position
-                    suggestedPackagesRef.current,
-                    parseInt(euiTheme.size.l, 10)
-                  );
-                }
-              }}
-              css={css`
-                flex-grow: 1;
+                    {API_ENDPOINTS.slice(0, 2).map((endpoint) => {
+                      return (
+                        <EuiCard
+                          key={endpoint.id}
+                          layout="horizontal"
+                          hasBorder
+                          paddingSize="none"
+                          icon={
+                            <div style={{ position: 'relative', display: 'inline-flex' }}>
+                              <CardLogoIcon
+                                src={endpoint.logoUrl}
+                                alt={endpoint.name}
+                                logoEuiIcon={endpoint.logoEuiIcon}
+                              />
+                              <div
+                                style={{
+                                  position: 'absolute',
+                                  bottom: -5,
+                                  right: -5,
+                                  width: 20,
+                                  height: 20,
+                                  borderRadius: 5,
+                                  backgroundColor: euiTheme.colors.backgroundBasePlain,
+                                  border: `1px solid ${euiTheme.colors.borderBaseSubdued}`,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                }}
+                              >
+                                <EuiIcon type="code" size="m" color={euiTheme.colors.textSubdued} />
+                              </div>
+                            </div>
+                          }
+                          title={endpoint.name}
+                          titleElement="h4"
+                          titleSize="xs"
+                          description={endpoint.description}
+                          onClick={() => {
+                            setOpenAccordionId(endpoint.id);
+                            setFlyoutTab('details');
+                          }}
+                          css={css`
+                            border-radius: 6px;
+                            padding: 16px;
+                            box-shadow: none;
+                            cursor: pointer;
+                            .euiCard__top {
+                              margin-inline-end: 12px;
+                              flex-shrink: 0;
+                              align-self: flex-start;
+                            }
+                            .euiCard__content,
+                            .euiCard__children {
+                              margin-bottom: 0;
+                              padding-bottom: 0;
+                            }
+                            & [class*='euiCard__description'] {
+                              margin-block-start: 4px !important;
+                            }
+                          `}
+                        />
+                      );
+                    })}
+                    {showMoreApi &&
+                      API_ENDPOINTS.slice(2).map((endpoint) => {
+                        return (
+                          <EuiCard
+                            key={endpoint.id}
+                            layout="horizontal"
+                            hasBorder
+                            paddingSize="none"
+                            icon={
+                              <div style={{ position: 'relative', display: 'inline-flex' }}>
+                                <CardLogoIcon
+                                  src={endpoint.logoUrl}
+                                  alt={endpoint.name}
+                                  logoEuiIcon={endpoint.logoEuiIcon}
+                                />
+                                <div
+                                  style={{
+                                    position: 'absolute',
+                                    bottom: -5,
+                                    right: -5,
+                                    width: 20,
+                                    height: 20,
+                                    borderRadius: 5,
+                                    backgroundColor: euiTheme.colors.backgroundBasePlain,
+                                    border: `1px solid ${euiTheme.colors.borderBaseSubdued}`,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                  }}
+                                >
+                                  <EuiIcon
+                                    type="code"
+                                    size="m"
+                                    color={euiTheme.colors.textSubdued}
+                                  />
+                                </div>
+                              </div>
+                            }
+                            title={endpoint.name}
+                            titleElement="h4"
+                            titleSize="xs"
+                            description={endpoint.description}
+                            onClick={() => {
+                              setOpenAccordionId(endpoint.id);
+                              setFlyoutTab('details');
+                            }}
+                            css={css`
+                              border-radius: 6px;
+                              padding: 16px;
+                              box-shadow: none;
+                              cursor: pointer;
+                              .euiCard__top {
+                                margin-inline-end: 12px;
+                                flex-shrink: 0;
+                                align-self: flex-start;
+                              }
+                              .euiCard__content,
+                              .euiCard__children {
+                                margin-bottom: 0;
+                                padding-bottom: 0;
+                              }
+                              & [class*='euiCard__description'] {
+                                margin-block-start: 4px !important;
+                              }
+                            `}
+                          />
+                        );
+                      })}
+                  </div>
+                </div>
+                <div
+                  css={css`
+                    position: relative;
+                    text-align: center;
+                    margin-top: 12px;
+                  `}
+                >
+                  <EuiHorizontalRule
+                    margin="none"
+                    css={css`
+                      position: absolute;
+                      top: 50%;
+                      transform: translateY(-50%);
+                    `}
+                  />
+                  <span
+                    css={css`
+                      position: relative;
+                      background-color: ${euiTheme.colors.backgroundBasePlain};
+                      padding: 0 8px;
+                    `}
+                  >
+                    <EuiButtonEmpty
+                      data-test-subj="observabilityOnboardingOnboardingFlowFormButton"
+                      size="s"
+                      iconType={showMoreApi ? 'arrowUp' : 'arrowDown'}
+                      iconSide="right"
+                      onClick={() => setShowMoreApi((prev) => !prev)}
+                    >
+                      {showMoreApi ? 'Show less' : 'Show more'}
+                    </EuiButtonEmpty>
+                  </span>
+                </div>
+              </>
+            )}
+          </EuiFlexGroup>
 
-                & > .euiPanel {
+          {/* API endpoint detail flyout */}
+          {openAccordionId &&
+            !usesV2StyleApiEndpoints &&
+            (() => {
+              const endpoint = API_ENDPOINTS.find((e) => e.id === openAccordionId);
+              if (!endpoint) return null;
+              const existingKey = createdKeys[endpoint.id];
+              const isEnrollment = endpoint.keyType === 'enrollment_token';
+              const isKibanaNoteType = endpoint.keyType === 'kibana_note';
+              const endpointUrl = endpoint.getEndpointUrl(window.location.origin);
+              const flyoutEndpointId = isKibanaNoteType ? 'endpoint-elasticsearch' : endpoint.id;
+              const codeBlockCss = css`
+                height: 32px;
+                overflow: hidden;
+                .euiCodeBlock__pre,
+                .euiCodeBlock__code {
+                  height: 32px;
+                  padding: 0 8px;
+                  line-height: 32px;
+                  overflow: hidden;
+                }
+                .euiCodeBlock__controls {
+                  top: 50%;
+                  transform: translateY(-50%);
+                  height: auto;
                   display: flex;
-
-                  & > .euiCheckableCard__label {
-                    display: flex;
-                    flex-direction: column;
-                  }
+                  align-items: center;
                 }
-              `}
-            />
-          </EuiFlexItem>
-        ))}
-      </EuiFlexGrid>
-      {/* Hiding element instead of not rending these elements in order to preload available packages on page load */}
-      <div
-        hidden={featuredCardsForCategory.length === 0}
-        role="group"
-        aria-labelledby={packageListTitleId}
-      >
-        <EuiSpacer size="xxl" />
-        <div ref={suggestedPackagesRef}>
-          <EuiTitle size="s" id={packageListTitleId}>
-            <strong>
-              {searchParams.get('category') === 'kubernetes'
-                ? i18n.translate(
-                    'xpack.observability_onboarding.experimentalOnboardingFlow.kubernetesPackagesTitle',
+              `;
+              return (
+                <EuiFlyout ownFocus onClose={() => setOpenAccordionId(null)} size="m">
+                  <EuiFlyoutHeader>
+                    <EuiFlexGroup gutterSize="m" alignItems="center" responsive={false}>
+                      <EuiFlexItem grow={false}>
+                        <CardLogoIcon
+                          src={endpoint.logoUrl}
+                          alt={endpoint.name}
+                          logoEuiIcon={endpoint.logoEuiIcon}
+                        />
+                      </EuiFlexItem>
+                      <EuiFlexItem>
+                        <EuiTitle size="s">
+                          <h2>{endpoint.name}</h2>
+                        </EuiTitle>
+                        <EuiText size="s" color="subdued">
+                          <p>{endpoint.description}</p>
+                        </EuiText>
+                      </EuiFlexItem>
+                    </EuiFlexGroup>
+                    <EuiSpacer size="m" />
+                    <EuiTabs>
+                      <EuiTab
+                        isSelected={flyoutTab === 'details'}
+                        onClick={() => setFlyoutTab('details')}
+                      >
+                        Details
+                      </EuiTab>
+                      <EuiTab
+                        isSelected={flyoutTab === 'api-key'}
+                        onClick={() => setFlyoutTab('api-key')}
+                      >
+                        {isEnrollment ? 'Enrollment token' : 'API Key'}
+                      </EuiTab>
+                    </EuiTabs>
+                  </EuiFlyoutHeader>
+
+                  <EuiFlyoutBody>
+                    {flyoutTab === 'details' && (
+                      <>
+                        <EuiText size="s">
+                          <p>{endpoint.details}</p>
+                        </EuiText>
+                        <EuiSpacer size="l" />
+                        <EuiFormRow label="Endpoint" fullWidth>
+                          <EuiCodeBlock
+                            language="text"
+                            fontSize="s"
+                            paddingSize="none"
+                            isCopyable
+                            whiteSpace="nowrap"
+                            data-test-subj={`observabilityOnboardingFlyoutCodeBlock--${openAccordionId}--details`}
+                            css={codeBlockCss}
+                          >
+                            {endpointUrl}
+                          </EuiCodeBlock>
+                        </EuiFormRow>
+                        <EuiSpacer size="l" />
+                        <EuiLink
+                          data-test-subj="observabilityOnboardingOnboardingFlowFormViewDocumentationLink"
+                          href={endpoint.docsUrl}
+                          target="_blank"
+                          external
+                        >
+                          View documentation
+                        </EuiLink>
+                      </>
+                    )}
+
+                    {flyoutTab === 'api-key' && (
+                      <>
+                        <EuiText size="s" color="subdued">
+                          <p>{endpoint.keyTypeDescription}</p>
+                        </EuiText>
+                        <EuiSpacer size="l" />
+                        <EuiFormRow label={isEnrollment ? 'Enrollment token' : 'API Key'} fullWidth>
+                          <EuiCodeBlock
+                            language="text"
+                            fontSize="s"
+                            paddingSize="none"
+                            isCopyable={!!existingKey}
+                            whiteSpace="nowrap"
+                            data-test-subj={`observabilityOnboardingFlyoutCodeBlock--${openAccordionId}--apiKey`}
+                            css={css`
+                              ${codeBlockCss}
+                              .euiCodeBlock__pre,
+                            .euiCodeBlock__code {
+                                color: ${existingKey ? 'inherit' : euiTheme.colors.textSubdued};
+                              }
+                            `}
+                          >
+                            {existingKey ?? 'No key created yet'}
+                          </EuiCodeBlock>
+                        </EuiFormRow>
+                        <EuiSpacer size="m" />
+                        {existingKey ? (
+                          <EuiFlexGroup gutterSize="s" responsive={false}>
+                            <EuiFlexItem grow={false}>
+                              <EuiButton
+                                data-test-subj="observabilityOnboardingOnboardingFlowFormRegenerateButton"
+                                size="s"
+                                iconType="refresh"
+                                onClick={() =>
+                                  setCreateKeyFlyout({ endpointId: flyoutEndpointId, keyName: '' })
+                                }
+                              >
+                                Regenerate
+                              </EuiButton>
+                            </EuiFlexItem>
+                          </EuiFlexGroup>
+                        ) : (
+                          <EuiButton
+                            data-test-subj="observabilityOnboardingOnboardingFlowFormButton"
+                            size="s"
+                            fill
+                            onClick={() =>
+                              setCreateKeyFlyout({ endpointId: flyoutEndpointId, keyName: '' })
+                            }
+                          >
+                            {isEnrollment ? 'Create enrollment token' : 'Create API key'}
+                          </EuiButton>
+                        )}
+                      </>
+                    )}
+                  </EuiFlyoutBody>
+                </EuiFlyout>
+              );
+            })()}
+
+          {/* Integrations section (after API for Version 3 and non-ingest layouts; Version 1 & 2 render Integrations above API) */}
+          {!integrationsFirstLayout ? (
+            <>
+              <div style={{ height: 40 }} />
+              <EuiTitle size="s">
+                <h3>Integrations</h3>
+              </EuiTitle>
+              <EuiSpacer size="s" />
+              <EuiText size="s" color="subdued">
+                <p>
+                  Pre-built integrations for your infrastructure and services. Includes dashboards,
+                  alerts, and more.
+                </p>
+              </EuiText>
+              <div style={{ height: 24 }} />
+              <div
+                css={css`
+                  background-color: ${euiTheme.colors.backgroundBaseSubdued};
+                  border-radius: ${euiTheme.border.radius.medium};
+                  padding: 24px;
+                  min-width: 0;
+                `}
+              >
+                <EuiFieldSearch
+                  fullWidth
+                  data-test-subj="obsOnboardingIntegrationsSearchInput"
+                  placeholder={i18n.translate(
+                    'xpack.observabilityOnboarding.integrations.searchPlaceholder',
                     {
-                      defaultMessage: 'Monitor your Kubernetes cluster using:',
-                    }
-                  )
-                : searchParams.get('category') === 'application'
-                ? i18n.translate(
-                    'xpack.observability_onboarding.experimentalOnboardingFlow.applicationPackagesTitle',
-                    {
-                      defaultMessage: 'Monitor your Application using:',
-                    }
-                  )
-                : searchParams.get('category') === 'cloud'
-                ? i18n.translate(
-                    'xpack.observability_onboarding.experimentalOnboardingFlow.cloudPackagesTitle',
-                    {
-                      defaultMessage: 'Select your Cloud provider:',
-                    }
-                  )
-                : i18n.translate(
-                    'xpack.observability_onboarding.experimentalOnboardingFlow.hostPackagesTitle',
-                    {
-                      defaultMessage: 'Monitor your Host using:',
+                      defaultMessage: 'Search integrations',
                     }
                   )}
-            </strong>
-          </EuiTitle>
-          <EuiSpacer size="m" />
-          <PackageList list={featuredCardsForCategory} showCardLabels={true} />
-        </div>
-      </div>
+                  value={integrationSearch}
+                  onChange={(e) => setIntegrationSearch(e.target.value)}
+                  isClearable
+                  compressed
+                />
+                <EuiSpacer size="l" />
+                {isLandingV2OrV3 ? (
+                  <div
+                    ref={
+                      activeVersion === 'version3'
+                        ? setVersion3IntegrationsPackageHost
+                        : setVersion2IntegrationsPackageHost
+                    }
+                    css={css`
+                      [data-test-subj='epmList.mainColumn'] {
+                        background-color: transparent !important;
+                      }
+                    `}
+                    style={{
+                      /* Only separate portaled package hits from the grid when search is active. */
+                      marginBottom: integrationSearch.trim() ? 40 : 0,
+                    }}
+                  />
+                ) : null}
+                {(!isLandingV2OrV3 || !integrationSearch) && (
+                  <>
+                    {allSections.map((section, index) => (
+                      <div key={section.title}>
+                        <div style={{ height: index === 0 ? 0 : 40 }} />
+                        <EuiText
+                          size="s"
+                          css={css`
+                            font-weight: ${euiTheme.font.weight.bold};
+                            color: ${euiTheme.colors.text};
+                            margin-bottom: 8px;
+                          `}
+                        >
+                          <p>{section.title}</p>
+                        </EuiText>
+                        <div
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(3, 1fr)',
+                            gap: 12,
+                          }}
+                        >
+                          {section.tiles.map((tile) => (
+                            <IntegrationCard
+                              key={tile.id}
+                              name={tile.name}
+                              description={tile.description}
+                              logoDomain={tile.logoDomain}
+                              logoUrl={tile.logoUrl}
+                              layout="horizontal"
+                              onClick={() => handleIntegrationTileClick(tile.id)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
 
-      <div ref={searchResultsRef}>
-        <EuiSpacer size="xxl" />
-        <EuiText size="s" color="subdued">
-          <strong>
-            <FormattedMessage
-              id="xpack.observability_onboarding.experimentalOnboardingFlow.form.searchPromptText"
-              defaultMessage="Search through other ways of ingesting data:"
-            />
-          </strong>
-        </EuiText>
-        <EuiSpacer size="m" />
-        <PackageListSearchForm
-          searchQuery={integrationSearch}
-          setSearchQuery={setIntegrationSearch}
-          flowCategory={searchParams.get('category')}
-          customCards={customCards.filter((card) => !card.isCollectionCard)}
-          excludePackageIdList={searchExcludePackageIdList}
-        />
-      </div>
-    </EuiPanel>
+                    {/* Popular integrations row */}
+                    <div style={{ height: 40 }} />
+                    <EuiText
+                      size="s"
+                      css={css`
+                        font-weight: ${euiTheme.font.weight.bold};
+                        color: ${euiTheme.colors.text};
+                        margin-bottom: 8px;
+                      `}
+                    >
+                      <p>More integrations</p>
+                    </EuiText>
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(5, minmax(0, 1fr)) minmax(0, 2fr)',
+                        gap: 12,
+                        alignItems: 'start',
+                      }}
+                    >
+                      {POPULAR_INTEGRATION_TILES.map((tile) => (
+                        <EuiCard
+                          key={tile.id}
+                          title={tile.name}
+                          titleElement="h4"
+                          titleSize="xs"
+                          description=""
+                          icon={<CardLogoIcon src={tile.logoUrl ?? ''} alt={`${tile.name} logo`} />}
+                          layout="vertical"
+                          hasBorder
+                          paddingSize="none"
+                          onClick={() => handleIntegrationTileClick(tile.id.replace('popular-', ''))}
+                          css={css`
+                            border-radius: 6px;
+                            box-shadow: ${euiTheme.shadows.s};
+                            padding: 16px;
+                            cursor: pointer;
+                            text-align: center;
+                            transition: box-shadow 150ms ease-in;
+                            &:hover,
+                            &:focus {
+                              box-shadow: ${euiTheme.shadows.m};
+                            }
+                            .euiCard__top {
+                              display: flex;
+                              justify-content: center;
+                              margin-bottom: 12px;
+                            }
+                            .euiCard__icon {
+                              margin-block-start: 0;
+                            }
+                            .euiCard__title {
+                              font-family: ${euiTheme.font.family};
+                              font-weight: ${euiTheme.font.weight.bold};
+                              color: ${euiTheme.colors.text};
+                            }
+                            .euiCard__description,
+                            .euiCard__children {
+                              display: none;
+                            }
+                            .euiCard__content {
+                              margin-bottom: 0;
+                              padding-bottom: 0;
+                            }
+                          `}
+                        />
+                      ))}
+                      <EuiCard
+                        title="Browse all"
+                        titleElement="h4"
+                        titleSize="xs"
+                        description=""
+                        icon={
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              height: 40,
+                              overflow: 'hidden',
+                            }}
+                          >
+                            {[
+                              {
+                                id: 'nginx',
+                                name: 'Nginx',
+                                url: `${ELASTIC_LOGOS}/nginx/img/logo_nginx.svg`,
+                              },
+                              {
+                                id: 'rabbitmq',
+                                name: 'RabbitMQ',
+                                url: `${ELASTIC_LOGOS}/rabbitmq/img/logo_rabbitmq.svg`,
+                              },
+                              {
+                                id: 'apache',
+                                name: 'Apache',
+                                url: `${ELASTIC_LOGOS}/apache/img/logo_apache.svg`,
+                              },
+                              {
+                                id: 'couchbase',
+                                name: 'Couchbase',
+                                url: `${ELASTIC_LOGOS}/couchbase/img/couchbase-logo.svg`,
+                              },
+                              {
+                                id: 'logstash',
+                                name: 'Logstash',
+                                url: `${ELASTIC_LOGOS}/logstash/img/logo_logstash.svg`,
+                              },
+                              {
+                                id: 'redis',
+                                name: 'Redis',
+                                url: `${ELASTIC_LOGOS}/redis/img/logo_redis.svg`,
+                              },
+                              {
+                                id: 'mysql',
+                                name: 'MySQL',
+                                url: `${ELASTIC_LOGOS}/mysql/img/logo_mysql.svg`,
+                              },
+                            ].map((logo, i, arr) => (
+                              <div
+                                key={logo.id}
+                                style={{
+                                  width: 40,
+                                  height: 40,
+                                  borderRadius: 8,
+                                  backgroundColor: euiTheme.colors.backgroundBaseSubdued,
+                                  border: `1px solid ${euiTheme.colors.borderBaseSubdued}`,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  marginLeft: i === 0 ? 0 : -10,
+                                  zIndex: arr.length - i,
+                                  position: 'relative',
+                                  overflow: 'hidden',
+                                  flexShrink: 0,
+                                }}
+                              >
+                                <img
+                                  src={logo.url}
+                                  alt={logo.name}
+                                  style={{ width: 24, height: 24, objectFit: 'contain' }}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        }
+                        layout="vertical"
+                        hasBorder
+                        paddingSize="none"
+                        onClick={() =>
+                          application.navigateToApp('integrations', { path: '/browse' })
+                        }
+                        css={css`
+                          border-radius: 6px;
+                          box-shadow: ${euiTheme.shadows.s};
+                          padding: 16px;
+                          cursor: pointer;
+                          text-align: center;
+                          transition: box-shadow 150ms ease-in;
+                          &:hover,
+                          &:focus {
+                            box-shadow: ${euiTheme.shadows.m};
+                          }
+                          .euiCard__top {
+                            display: flex;
+                            justify-content: center;
+                            margin-bottom: 12px;
+                          }
+                          .euiCard__icon {
+                            margin-block-start: 0;
+                          }
+                          .euiCard__title {
+                            font-family: ${euiTheme.font.family};
+                            font-weight: ${euiTheme.font.weight.bold};
+                            color: ${euiTheme.colors.text};
+                          }
+                          .euiCard__description,
+                          .euiCard__children {
+                            display: none;
+                          }
+                          .euiCard__content {
+                            margin-bottom: 0;
+                            padding-bottom: 0;
+                          }
+                        `}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+            </>
+          ) : null}
+          {/* end integrations content shell */}
+        </>
+      )}
+
+      {createKeyFlyout &&
+        (() => {
+          const endpoint = API_ENDPOINTS.find((e) => e.id === createKeyFlyout.endpointId);
+          if (!endpoint) return null;
+          const isEnrollment = endpoint.keyType === 'enrollment_token';
+          const keyLabel = isEnrollment ? 'enrollment token' : 'API key';
+          const keyLabelCap = isEnrollment ? 'Enrollment token' : 'API Key';
+
+          return (
+            <EuiFlyout
+              ownFocus
+              onClose={() => setCreateKeyFlyout(null)}
+              size="s"
+              aria-labelledby="createKeyFlyoutTitle"
+            >
+              <EuiFlyoutHeader hasBorder>
+                <EuiFlexGroup gutterSize="s" alignItems="center" responsive={false}>
+                  <EuiFlexItem grow={false}>
+                    {endpoint.logoEuiIcon ? (
+                      <EuiIcon type={endpoint.logoEuiIcon} size="l" title={endpoint.name} />
+                    ) : (
+                      <img
+                        src={endpoint.logoUrl}
+                        alt={endpoint.name}
+                        style={{ width: 20, height: 20, objectFit: 'contain' }}
+                      />
+                    )}
+                  </EuiFlexItem>
+                  <EuiFlexItem>
+                    <EuiTitle size="s">
+                      <h2 id="createKeyFlyoutTitle">
+                        Create {keyLabel} for {endpoint.name}
+                      </h2>
+                    </EuiTitle>
+                  </EuiFlexItem>
+                </EuiFlexGroup>
+                {endpoint.keyRole && (
+                  <>
+                    <EuiSpacer size="s" />
+                    <EuiText size="s" color="subdued">
+                      <p>
+                        This {keyLabel} will have <strong>{endpoint.keyRole}</strong> permissions.{' '}
+                        <EuiLink
+                          data-test-subj="observabilityOnboardingOnboardingFlowFormLearnMoreLink"
+                          href={docLinks.links.elasticsearch.apiKeys}
+                          target="_blank"
+                        >
+                          Learn more
+                        </EuiLink>
+                      </p>
+                    </EuiText>
+                  </>
+                )}
+              </EuiFlyoutHeader>
+              <EuiFlyoutBody>
+                <EuiFormRow
+                  label={`${keyLabelCap} name`}
+                  helpText={`A descriptive name helps identify what this ${keyLabel} is used for.`}
+                  fullWidth
+                >
+                  <EuiFieldText
+                    data-test-subj="observabilityOnboardingOnboardingFlowFormFieldText"
+                    value={createKeyFlyout.keyName}
+                    onChange={(e) =>
+                      setCreateKeyFlyout((prev) =>
+                        prev ? { ...prev, keyName: e.target.value } : null
+                      )
+                    }
+                    fullWidth
+                    placeholder={`e.g. ${endpoint.name.toLowerCase().replace(/[\s–-]+/g, '-')}-key`}
+                    autoFocus
+                  />
+                </EuiFormRow>
+                {endpoint.keyBehavior && (
+                  <>
+                    <EuiSpacer size="m" />
+                    <EuiText size="s" color="subdued">
+                      <p>
+                        {endpoint.keyBehavior === 'reused' &&
+                          'This key is typically reused across sessions.'}
+                        {endpoint.keyBehavior === 'always_recreated' &&
+                          'A new key should be created each time to maintain security.'}
+                        {endpoint.keyBehavior === 'legacy' &&
+                          'Legacy usage — only required for Beats or Logstash configurations.'}
+                      </p>
+                    </EuiText>
+                  </>
+                )}
+              </EuiFlyoutBody>
+              <EuiFlyoutFooter>
+                <EuiFlexGroup justifyContent="spaceBetween" alignItems="center">
+                  <EuiFlexItem grow={false}>
+                    <EuiButtonEmpty
+                      data-test-subj="observabilityOnboardingOnboardingFlowFormButton"
+                      iconType="key"
+                      href={`${window.location.origin}/app/management/security/api_keys`}
+                      target="_blank"
+                    >
+                      Manage {isEnrollment ? 'tokens' : 'API keys'}
+                    </EuiButtonEmpty>
+                  </EuiFlexItem>
+                  <EuiFlexItem grow={false}>
+                    <EuiButton
+                      data-test-subj="observabilityOnboardingOnboardingFlowFormButton"
+                      fill
+                      isDisabled={!createKeyFlyout.keyName}
+                      onClick={() => {
+                        const mockKey = `${createKeyFlyout.keyName}:${Date.now().toString(
+                          36
+                        )}abcdef1234567890`;
+                        setCreatedKeys((prev) => ({
+                          ...prev,
+                          [createKeyFlyout!.endpointId]: mockKey,
+                        }));
+                        setCreateKeyFlyout(null);
+                      }}
+                    >
+                      Create {keyLabelCap}
+                    </EuiButton>
+                  </EuiFlexItem>
+                </EuiFlexGroup>
+              </EuiFlyoutFooter>
+            </EuiFlyout>
+          );
+        })()}
+
+      {/* Not ready section — shown once loaded (hidden when Integrations-first layout: Version 1 & 2) */}
+      {!isPageLoading && !integrationsFirstLayout && (
+        <div
+          css={css`
+            padding-block-end: 80px;
+          `}
+        >
+          <div style={{ height: 40 }} />
+          <EuiTitle size="s">
+            <h3>Not ready to add data?</h3>
+          </EuiTitle>
+          <EuiSpacer size="s" />
+          <EuiText size="s" color="subdued">
+            <p>
+              Explore resources to learn more, get help, or try Elastic before connecting your data.
+            </p>
+          </EuiText>
+          <div style={{ height: 24 }} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+            {[
+              {
+                id: 'demo',
+                title: 'Demo environment',
+                description: 'See Elastic in action with a live demo.',
+                icon: 'play',
+                href: 'https://www.elastic.co/demo',
+              },
+              {
+                id: 'forum',
+                title: 'Explore forum',
+                description: 'Get help and connect with the Elastic community.',
+                icon: 'discuss',
+                href: 'https://discuss.elastic.co/',
+              },
+              {
+                id: 'docs',
+                title: 'Browse documentation',
+                description: 'In-depth guides for all Observability features.',
+                icon: 'documentation',
+                href: docLinks.links.observability.guide,
+              },
+              {
+                id: 'support',
+                title: 'Support Hub',
+                description: 'Open a case with the Elastic support team.',
+                icon: 'help',
+                href: supportUrl,
+              },
+            ].map((item) => (
+              <EuiCard
+                key={item.id}
+                layout="horizontal"
+                icon={
+                  <div
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 8,
+                      backgroundColor: euiTheme.colors.backgroundBaseSubdued,
+                      border: `1px solid ${euiTheme.colors.borderBaseSubdued}`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <EuiIcon type={item.icon} size="m" color={euiTheme.colors.primary} />
+                  </div>
+                }
+                title={item.title}
+                titleElement="h4"
+                titleSize="xs"
+                description={item.description}
+                href={item.href}
+                target="_blank"
+                hasBorder
+                paddingSize="none"
+                css={css`
+                  border-radius: 6px;
+                  padding: 16px;
+                  box-shadow: none;
+                  cursor: pointer;
+                  .euiCard__top {
+                    margin-inline-end: 12px;
+                    flex-shrink: 0;
+                    align-self: flex-start;
+                  }
+                  .euiCard__title {
+                    font-family: ${euiTheme.font.family};
+                    font-weight: ${euiTheme.font.weight.bold};
+                    color: ${euiTheme.colors.text};
+                  }
+                  .euiCard__content,
+                  .euiCard__children {
+                    margin-bottom: 0;
+                    padding-bottom: 0;
+                  }
+                  & [class*='euiCard__description'] {
+                    margin-block-start: 4px !important;
+                  }
+                `}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+      {catalogFlyout}
+    </>
   );
 };
-
-function scrollIntoViewWithOffset(element: HTMLElement, offset = 0) {
-  // Fixed header in Kibana is different height between serverless and stateful so need to calculate dynamically.
-  const fixedHeaders = document.querySelectorAll('#globalHeaderBars [data-fixed-header=true]');
-  fixedHeaders.forEach((header) => {
-    offset += header.getBoundingClientRect().height;
-  });
-
-  window.scrollTo({
-    behavior: 'smooth',
-    top: element.getBoundingClientRect().top - document.body.getBoundingClientRect().top - offset,
-  });
-}

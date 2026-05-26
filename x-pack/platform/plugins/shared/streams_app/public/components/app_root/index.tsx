@@ -5,7 +5,7 @@
  * 2.0.
  */
 
-import React from 'react';
+import React, { useLayoutEffect } from 'react';
 import { type AppMountParameters, type CoreStart } from '@kbn/core/public';
 import {
   BreadcrumbsContextProvider,
@@ -39,6 +39,27 @@ export function AppRoot({
   isServerless: boolean;
 } & { appMountParameters: AppMountParameters }) {
   const { history } = appMountParameters;
+
+  // Remove any block-UX CSS overrides left over from the Ingest Hub before the
+  // first browser paint, so every Streams page (including all tour steps) has a
+  // consistent chrome layout. Only clean up if the blockUx style tag is present
+  // (i.e. navigating from blockUx mode), to avoid disrupting other app layouts.
+  useLayoutEffect(() => {
+    const blockUxStyleEl = document.getElementById('blockUxOverrideStyles');
+    if (!blockUxStyleEl) return;
+    blockUxStyleEl.remove();
+    const appEl = document.querySelector('.kbnChromeLayoutApplication');
+    const gridRoot = appEl?.parentElement;
+    if (gridRoot) {
+      gridRoot.style.removeProperty('grid-template-columns');
+      gridRoot.style.removeProperty('background');
+    }
+    if (appEl) {
+      (appEl as HTMLElement).style.removeProperty('margin-left');
+      (appEl as HTMLElement).style.removeProperty('margin-right');
+      (appEl as HTMLElement).style.removeProperty('width');
+    }
+  }, []);
 
   const context = {
     appParams: appMountParameters,

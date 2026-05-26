@@ -34,13 +34,16 @@ import { HeaderActions } from './components/header_actions/header_actions';
 import { HeaderMenu } from './components/header_menu/header_menu';
 import { getNewsFeed } from './components/news_feed/helpers/get_news_feed';
 import { NewsFeed } from './components/news_feed/news_feed';
+import { AgentEmptyState } from './components/agent_empty_state';
 import { ObservabilityOnboardingCallout } from './components/observability_onboarding_callout';
 import { calculateBucketSize } from './helpers/calculate_bucket_size';
 import { useKibana } from '../../utils/kibana_react';
 import type { DataContextApps, HasDataMap } from '../../context/has_data_context/has_data_context';
 import { appLabels } from '../../context/has_data_context/has_data_context';
+import { useIngestHubVersion } from '../../hooks/use_ingest_hub_version';
 
 export function OverviewPage() {
+  const { isSkipVersion, isAgentVersion } = useIngestHubVersion();
   const {
     http,
     observabilityAIAssistant,
@@ -162,16 +165,20 @@ export function OverviewPage() {
   return (
     <ObservabilityPageTemplate
       isPageDataLoaded={isAllRequestsComplete}
-      pageHeader={{
-        pageTitle: i18n.translate('xpack.observability.overview.pageTitle', {
-          defaultMessage: 'Overview',
-        }),
-        rightSideItems: hasAnyData ? [<HeaderActions />] : [],
-        rightSideGroupProps: {
-          responsive: true,
+      {...(!isAgentVersion && {
+        pageHeader: {
+          ...(isSkipVersion ? {} : {
+            pageTitle: i18n.translate('xpack.observability.overview.pageTitle', {
+              defaultMessage: 'Overview',
+            }),
+          }),
+          rightSideItems: hasAnyData ? [<HeaderActions />] : [],
+          rightSideGroupProps: {
+            responsive: true,
+          },
+          'data-test-subj': 'obltOverviewPageHeader',
         },
-        'data-test-subj': 'obltOverviewPageHeader',
-      }}
+      })}
       pageSectionProps={{
         contentProps: {
           style: {
@@ -184,9 +191,24 @@ export function OverviewPage() {
     >
       <HeaderMenu />
 
-      {hasAnyData ? (
+      {isAgentVersion ? (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'center',
+            minHeight: 'calc(100vh - 96px)',
+            paddingTop: 'max(40px, calc((100vh - 96px) * 0.18))',
+            paddingBottom: '40px',
+            width: '100%',
+            boxSizing: 'border-box',
+          }}
+        >
+          <AgentEmptyState />
+        </div>
+      ) : hasAnyData ? (
         <>
-          <ObservabilityOnboardingCallout />
+          {!isSkipVersion && <ObservabilityOnboardingCallout />}
 
           <EuiFlexGroup direction="column" gutterSize="s">
             <EuiFlexItem grow={false}>
@@ -220,37 +242,43 @@ export function OverviewPage() {
             </p>
           }
           actions={
-            <EuiButton
-              data-test-subj="o11yOverviewPageAddDataButton"
-              color="primary"
-              fill
-              href={onboardingHref}
-            >
-              {i18n.translate('xpack.observability.overview.emptyState.action', {
-                defaultMessage: 'Add data',
-              })}
-            </EuiButton>
+            isSkipVersion ? undefined : (
+              <EuiButton
+                data-test-subj="o11yOverviewPageAddDataButton"
+                color="primary"
+                fill
+                href={onboardingHref}
+              >
+                {i18n.translate('xpack.observability.overview.emptyState.action', {
+                  defaultMessage: 'Add data',
+                })}
+              </EuiButton>
+            )
           }
         />
       )}
-      <EuiHorizontalRule
-        css={{
-          width: 'auto',
-          marginLeft: `-${euiTheme.size.l}`,
-          marginRight: `-${euiTheme.size.l}`,
-        }}
-      />
+      {!isSkipVersion && (
+        <>
+          <EuiHorizontalRule
+            css={{
+              width: 'auto',
+              marginLeft: `-${euiTheme.size.l}`,
+              marginRight: `-${euiTheme.size.l}`,
+            }}
+          />
 
-      <EuiFlexGroup direction="column" gutterSize="xl" css={{ flexGrow: 0 }}>
-        {!!newsFeed?.items?.length && (
-          <EuiFlexItem grow={false}>
-            <NewsFeed items={newsFeed.items.slice(0, 3)} />
-          </EuiFlexItem>
-        )}
-        <EuiFlexItem grow={false}>
-          <ExternalResourceLinks />
-        </EuiFlexItem>
-      </EuiFlexGroup>
+          <EuiFlexGroup direction="column" gutterSize="xl" css={{ flexGrow: 0 }}>
+            {!!newsFeed?.items?.length && (
+              <EuiFlexItem grow={false}>
+                <NewsFeed items={newsFeed.items.slice(0, 3)} />
+              </EuiFlexItem>
+            )}
+            <EuiFlexItem grow={false}>
+              <ExternalResourceLinks />
+            </EuiFlexItem>
+          </EuiFlexGroup>
+        </>
+      )}
     </ObservabilityPageTemplate>
   );
 }

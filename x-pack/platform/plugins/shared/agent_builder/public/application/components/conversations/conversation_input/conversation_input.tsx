@@ -17,7 +17,7 @@ import { i18n } from '@kbn/i18n';
 import type { PropsWithChildren } from 'react';
 import React, { useEffect, useMemo } from 'react';
 import { useConversationId } from '../../../context/conversation/use_conversation_id';
-import { useSendMessage } from '../../../context/send_message/send_message_context';
+import { useConversationStream } from '../../../hooks/use_conversation_stream';
 import { useSubmitMessage } from '../../../hooks/use_submit_message';
 import { useAgentBuilderAgents } from '../../../hooks/agents/use_agents';
 import { useValidateAgentId } from '../../../hooks/agents/use_validate_agent_id';
@@ -144,7 +144,7 @@ export const ConversationInput: React.FC<ConversationInputProps> = ({
   onSubmit,
   onEditorFocus,
 }) => {
-  const { pendingMessage, error, isResuming, isResponseLoading } = useSendMessage();
+  const { pendingMessage, error, isResuming, isResponseLoading } = useConversationStream();
   const { isFetched } = useAgentBuilderAgents();
   const agentId = useAgentId();
   const conversationId = useConversationId();
@@ -155,19 +155,22 @@ export const ConversationInput: React.FC<ConversationInputProps> = ({
   const { addErrorToast } = useToasts();
   const hasActiveConversation = useHasActiveConversation();
   const isAwaitingPrompt = useIsAwaitingPrompt();
-  const { attachments, initialMessage, autoSendInitialMessage, resetInitialMessage } =
+  const { attachments, initialMessage, autoSendInitialMessage, resetInitialMessage, placeholder: contextPlaceholder } =
     useConversationContext();
   const submitMessage = useSubmitMessage();
 
   const validateAgentId = useValidateAgentId();
   const isAgentIdValid = validateAgentId(agentId);
+  const { isEmbeddedContext } = useConversationContext();
 
-  const isAgentDeleted = !isAgentIdValid && isFetched && Boolean(agentId);
+  // In embedded contexts (e.g. overview page inline input) the agent ID is resolved
+  // outside React by the embedding code. Never block the input with "agent deleted" there.
+  const isAgentDeleted = !isEmbeddedContext && !isAgentIdValid && isFetched && Boolean(agentId);
   const isInputDisabled = isAgentDeleted || isAwaitingPrompt || isResuming;
   const isSubmitDisabled =
     messageEditorController.isEmpty || isResponseLoading || !isAgentIdValid || isAwaitingPrompt;
 
-  const placeholder = isAgentDeleted ? disabledPlaceholder(agentId) : enabledPlaceholder;
+  const placeholder = isAgentDeleted ? disabledPlaceholder(agentId) : (contextPlaceholder ?? enabledPlaceholder);
 
   const editorContainerStyles = css`
     display: flex;

@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import type { EuiPageSectionProps } from '@elastic/eui';
+import type { EuiPageSectionProps, EuiPageSidebarProps } from '@elastic/eui';
 import { EuiPageTemplate } from '@elastic/eui';
 import { css } from '@emotion/css';
 
@@ -16,8 +16,10 @@ export function StreamsAppPageTemplate({ children }: { children: React.ReactNode
       offset={0}
       minHeight={0}
       restrictWidth={false}
+      grow
       className={css`
-        height: 0;
+        flex: 1;
+        min-height: 0;
       `}
     >
       {children}
@@ -27,24 +29,49 @@ export function StreamsAppPageTemplate({ children }: { children: React.ReactNode
 
 StreamsAppPageTemplate.Header = EuiPageTemplate.Header;
 StreamsAppPageTemplate.EmptyPrompt = EuiPageTemplate.EmptyPrompt;
+StreamsAppPageTemplate.Sidebar = ({
+  children,
+  ...props
+}: EuiPageSidebarProps & { children: React.ReactNode }) => (
+  <EuiPageTemplate.Sidebar
+    className={css`
+      border-right: 1px solid var(--euiBorderColor, #e0e5ee);
+      overflow-y: auto;
+    `}
+    {...props}
+  >
+    {children}
+  </EuiPageTemplate.Sidebar>
+);
 StreamsAppPageTemplate.Body = ({
   noPadding,
+  grow = true,
+  paddingSize,
   ...props
-}: EuiPageSectionProps & { noPadding?: boolean }) => (
+}: EuiPageSectionProps & { noPadding?: boolean; grow?: boolean }) => (
   <EuiPageTemplate.Section
-    grow
+    grow={grow}
+    restrictWidth={false}
     className={css`
       overflow-y: auto;
+      min-height: 0;
+      width: 100% !important;
+      max-width: 100% !important;
+      max-inline-size: 100% !important;
       ${noPadding ? 'padding: 0px;' : ''}
     `}
     contentProps={{
-      className: css`
-        display: flex;
-        flex-direction: column;
-        height: 100%;
-        ${noPadding ? 'padding: 0px;' : ''}
-      `,
+      style: {
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        width: '100%',
+        maxWidth: '100%',
+        maxInlineSize: '100%',
+        ...(noPadding ? { padding: 0 } : {}),
+      },
     }}
     {...props}
+    paddingSize={noPadding ? 'none' : paddingSize}
   />
 );

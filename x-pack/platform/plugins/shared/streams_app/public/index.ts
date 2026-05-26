@@ -15,6 +15,9 @@ import type {
   ConfigSchema,
   StreamsApplicationComponentType,
   StreamsApplicationProps,
+  DataSourcesCatalogFlyoutProps,
+  DataSourcesCatalogFlyoutInitialView,
+  AwsCatalogOnboardingWizardRenderProps,
 } from './types';
 
 export type {
@@ -22,6 +25,9 @@ export type {
   StreamsAppPublicStart,
   StreamsApplicationComponentType,
   StreamsApplicationProps,
+  DataSourcesCatalogFlyoutProps,
+  DataSourcesCatalogFlyoutInitialView,
+  AwsCatalogOnboardingWizardRenderProps,
 };
 
 export const plugin: PluginInitializer<

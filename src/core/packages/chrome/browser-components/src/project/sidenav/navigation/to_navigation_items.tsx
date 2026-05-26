@@ -198,10 +198,13 @@ export const toNavigationItems = (
         secondarySections = filterEmpty(
           navNode.children.map((child) => {
             if (child.sideNavStatus === 'hidden') return null;
-            if (!child.children?.length) return null;
 
-            const validChildren = filterValidSecondaryChildren(child.children);
+            const validChildren = filterValidSecondaryChildren(child.children ?? []);
             const secondaryItems = validChildren.map(createSecondaryMenuItem);
+
+            if (!child.children?.length && !child.title) {
+              return null;
+            }
 
             if (child.href) {
               warnOnce(
@@ -215,7 +218,7 @@ export const toNavigationItems = (
               items: secondaryItems,
             };
           })
-        ).filter((section) => section.items.length > 0); // Filter out empty sections;
+        ).filter((section) => section.items.length > 0 || section.label); // Keep labeled sections for empty groups (e.g. Starred)
       }
 
       // If after all filtering there are no sections, we skip this menu item
@@ -241,6 +244,7 @@ export const toNavigationItems = (
       sections: secondarySections,
       'data-test-subj': getTestSubj(navNode),
       badgeType: navNode.badgeType,
+      hidePanelTitle: navNode.panelTitle === 'hidden',
     } as MenuItem;
   };
 
