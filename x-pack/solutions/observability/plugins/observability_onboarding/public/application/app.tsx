@@ -20,6 +20,7 @@ import type {
   ObservabilityOnboardingPluginStartDeps,
 } from '../plugin';
 import { ObservabilityOnboardingFlow } from './observability_onboarding_flow';
+import { ObservabilityOnboardingHeaderActionMenu } from './shared/header_action_menu';
 
 export function ObservabilityOnboardingAppRoot({
   appMountParameters,
@@ -30,7 +31,7 @@ export function ObservabilityOnboardingAppRoot({
 }: {
   appMountParameters: AppMountParameters;
 } & RenderAppProps) {
-  const { history, theme$ } = appMountParameters;
+  const { history, theme$, setHeaderActionMenu } = appMountParameters;
   const services: ObservabilityOnboardingAppServices = {
     ...core,
     ...corePlugins,
@@ -57,6 +58,10 @@ export function ObservabilityOnboardingAppRoot({
         >
           <KibanaContextProvider services={services}>
             <Router history={history}>
+              <ObservabilityOnboardingHeaderActionMenu
+                setHeaderActionMenu={setHeaderActionMenu}
+                theme$={theme$}
+              />
               <PerformanceContextProvider>
                 <ObservabilityOnboardingFlow />
               </PerformanceContextProvider>
